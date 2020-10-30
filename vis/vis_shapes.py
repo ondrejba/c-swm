@@ -1,7 +1,9 @@
 import h5py
 import matplotlib.pyplot as plt
+import argparse
 
-PATH = "data/shapes_train.h5"
+
+PATH = "data/cubes_train_tiny.h5"
 DIRECTIONS = ["up", "right", "down", "left"]
 
 
@@ -15,9 +17,9 @@ def action_to_text(action):
     return "move object {:d} {:s}".format(obj, DIRECTIONS[direction])
 
 
-def main():
+def main(args):
 
-    data = h5py.File(PATH, "r")
+    data = h5py.File(args.path, "r")
     episodes = [int(key) for key in data.keys()]
     episodes = list(sorted(episodes))
 
@@ -33,13 +35,37 @@ def main():
             next_obs = ep_data["next_obs"][step]
 
             print(action_to_text(action))
-            plt.subplot(1, 2, 1)
-            plt.imshow(css_to_ssc(obs))
-            plt.axis("off")
-            plt.subplot(1, 2, 2)
-            plt.imshow(css_to_ssc(next_obs))
-            plt.axis("off")
+
+            if args.balls:
+                plt.subplot(2, 2, 1)
+                plt.imshow(css_to_ssc(obs)[:,:,0:3])
+                plt.axis("off")
+                plt.subplot(2, 2, 2)
+                plt.imshow(css_to_ssc(obs)[:,:,3:6])
+                plt.axis("off")
+            else:
+                plt.subplot(1, 2, 1)
+                plt.imshow(css_to_ssc(obs))
+                plt.axis("off")
+            
+            
+            if args.balls:
+                plt.subplot(2, 2, 3)
+                plt.imshow(css_to_ssc(next_obs)[:,:,0:3])
+                plt.axis("off")
+                plt.subplot(2, 2, 4)
+                plt.imshow(css_to_ssc(next_obs)[:,:,3:6])
+                plt.axis("off")
+            else:
+                plt.subplot(1, 2, 2)
+                plt.imshow(css_to_ssc(next_obs))
+                plt.axis("off")
             plt.show()
 
 
-main()
+p = argparse.ArgumentParser()
+p.add_argument("--path")
+p.add_argument("--balls",action="store_true")
+args = p.parse_args()
+
+main(args)
