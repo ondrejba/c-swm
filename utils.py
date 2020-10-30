@@ -188,3 +188,7 @@ class PathDataset(data.Dataset):
             self.experience_buffer[idx]['next_obs'][self.path_length - 1])
         observations.append(obs)
         return observations, actions
+
+
+def css_to_ssc(image):
+    return image.transpose((1, 2, 0))

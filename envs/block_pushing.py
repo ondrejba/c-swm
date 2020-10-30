@@ -65,6 +65,8 @@ def render_cubes(positions, width):
 class BlockPushing(gym.Env):
     """Gym environment for block pushing task."""
 
+    DIRECTIONS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
                  seed=None):
         self.width = width
@@ -143,6 +145,13 @@ class BlockPushing(gym.Env):
 
     def reset(self):
 
+        self.reset_objects_()
+
+        state_obs = (self.get_state(), self.render())
+        return state_obs
+
+    def reset_objects_(self):
+
         self.objects = [[-1, -1] for _ in range(self.num_objects)]
 
         # Randomize object position.
@@ -154,9 +163,6 @@ class BlockPushing(gym.Env):
                     np.random.choice(np.arange(self.width)),
                     np.random.choice(np.arange(self.height))
                 ]
-
-        state_obs = (self.get_state(), self.render())
-        return state_obs
 
     def valid_pos(self, pos, obj_id):
         """Check if position is valid."""
@@ -189,20 +195,22 @@ class BlockPushing(gym.Env):
             offset: (x, y) tuple of offsets.
         """
 
-        if self.valid_move(obj_id, offset):
-            self.objects[obj_id][0] += offset[0]
-            self.objects[obj_id][1] += offset[1]
+        if not self.valid_move(obj_id, offset):
+            return False
+
+        self.objects[obj_id][0] += offset[0]
+        self.objects[obj_id][1] += offset[1]
+
+        return True
 
     def step(self, action):
 
         done = False
         reward = 0
 
-        directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]
-
         direction = action % 4
         obj = action // 4
-        self.translate(obj, directions[direction])
+        self.translate(obj, self.DIRECTIONS[direction])
 
         state_obs = (self.get_state(), self.render())
 
