@@ -1,3 +1,9 @@
+# Get env directory
+import sys
+from pathlib import Path
+if str(Path.cwd()) not in sys.path:
+    sys.path.insert(0, str(Path.cwd()))
+
 from envs import physics_sim
 import numpy as np
 import argparse
