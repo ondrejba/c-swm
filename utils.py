@@ -192,3 +192,6 @@ class PathDataset(data.Dataset):
 
 def css_to_ssc(image):
     return image.transpose((1, 2, 0))
+
+def to_np(x):
+    return x.detach().cpu().numpy()

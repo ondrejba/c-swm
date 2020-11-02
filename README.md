@@ -26,6 +26,13 @@ http://arxiv.org/abs/1911.12247
 python data_gen/env.py --env_id ShapesTrain-v0 --fname data/shapes_train.h5 --num_episodes 1000 --seed 1
 python data_gen/env.py --env_id ShapesEval-v0 --fname data/shapes_eval.h5 --num_episodes 10000 --seed 2
 ```
+
+**2D Shapes + Cursor**:
+```bash
+python data_gen/env.py --env_id ShapesCursorTrain-v0 --fname data/shapes_cursor_train.h5 --num_episodes 1000 --seed 1
+python data_gen/env.py --env_id ShapesCursorEval-v0 --fname data/shapes_cursor_eval.h5 --num_episodes 10000 --seed 2
+```
+
 **3D Cubes**:
 ```bash
 python data_gen/env.py --env_id CubesTrain-v0 --fname data/cubes_train.h5 --num_episodes 1000 --seed 3
@@ -56,6 +63,13 @@ python data_gen/physics.py --num-episodes 1000 --fname data/balls_eval.h5 --eval
 ```bash
 python train.py --dataset data/shapes_train.h5 --encoder small --name shapes
 python eval.py --dataset data/shapes_eval.h5 --save-folder checkpoints/shapes --num-steps 1
+```
+
+**2D Shapes + Cursor**:
+```bash
+python train.py --dataset data/shapes_cursor_train.h5 --encoder small --name shapes_cursor --action-dim 8 --copy-action --num-objects 6
+python eval.py --dataset data/shapes_cursor_eval.h5 --save-folder checkpoints/shapes_cursor --num-steps 1
+python vis.py --dataset data/shapes_cursor_eval.h5 --save-folder checkpoints/shapes_cursor --num-steps 1
 ```
 
 **3D Cubes**:
