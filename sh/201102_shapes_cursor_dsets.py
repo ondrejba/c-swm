@@ -6,13 +6,13 @@ def run(i):
 
     cmd = ["python", "data_gen/env.py", "--env_id", "ShapesCursorTrain-v0",
            "--fname", "data/shapes_cursor_train_{:d}.h5".format(i),
-           "--num_episodes", "1000", "--seed", "1"]
+           "--num_episodes", "1000", "--seed", "{:d}".format(i)]
 
     subprocess.call(cmd)
 
     cmd = ["python", "data_gen/env.py", "--env_id", "ShapesCursorEval-v0",
            "--fname", "data/shapes_cursor_eval_{:d}.h5".format(i),
-           "--num_episodes", "10000", "--seed", "2"]
+           "--num_episodes", "10000", "--seed", "{:d}".format(i)]
 
     subprocess.call(cmd)
 

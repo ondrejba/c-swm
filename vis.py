@@ -91,30 +91,23 @@ with torch.no_grad():
             continue
 
         obs = observations[0]
-        next_obs = observations[-1]
 
         state_ext = model.obj_extractor(obs)
-        next_state_ext = model.obj_extractor(next_obs)
         num_objects = state_ext.shape[1]
 
         # current obs | obj 1 | obj 2 | ...
         # next obs | obj 1 | obj 2 | ...
-        plt.subplot(2, 7, 1)
-        plt.imshow(utils.css_to_ssc(utils.to_np(obs[0])))
+        plt.figure(figsize=(12, 7))
 
-        plt.subplot(2, 7, 8)
-        plt.imshow(utils.css_to_ssc(utils.to_np(next_obs[0])))
+        plt.subplot(1, 7, 1)
+        plt.imshow(utils.css_to_ssc(utils.to_np(obs[0])))
+        plt.axis("off")
 
         for i in range(num_objects):
-            plt.subplot(2, 7, 2 + i)
+
+            plt.subplot(1, 7, 2 + i)
             plt.imshow(utils.to_np(state_ext[0, i]))
+            plt.axis("off")
 
-            plt.subplot(2, 7, 9 + i)
-            plt.imshow(utils.to_np(next_state_ext[0, i]))
-
+        plt.tight_layout()
         plt.show()
-
-        state_enc = model.obj_encoder(state_ext)
-        next_state_enc = model.obj_encoder(next_state_ext)
-
-        print(state_ext.shape, state_enc.shape)
