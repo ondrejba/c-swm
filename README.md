@@ -33,6 +33,12 @@ python data_gen/env.py --env_id ShapesCursorTrain-v0 --fname data/shapes_cursor_
 python data_gen/env.py --env_id ShapesCursorEval-v0 --fname data/shapes_cursor_eval.h5 --num_episodes 10000 --seed 2
 ```
 
+**2D Shapes + Immovable**:
+```bash
+python data_gen/env.py --env_id ShapesImmovableTrain-v0 --fname data/shapes_imm_train.h5 --num_episodes 1000 --seed 1
+python data_gen/env.py --env_id ShapesImmovableEval-v0 --fname data/shapes_imm_eval.h5 --num_episodes 10000 --seed 2
+```
+
 **3D Cubes**:
 ```bash
 python data_gen/env.py --env_id CubesTrain-v0 --fname data/cubes_train.h5 --num_episodes 1000 --seed 3
@@ -70,6 +76,12 @@ python eval.py --dataset data/shapes_eval.h5 --save-folder checkpoints/shapes --
 python train.py --dataset data/shapes_cursor_train.h5 --encoder small --name shapes_cursor --action-dim 8 --copy-action --num-objects 6
 python eval.py --dataset data/shapes_cursor_eval.h5 --save-folder checkpoints/shapes_cursor --num-steps 1
 python vis.py --dataset data/shapes_cursor_eval.h5 --save-folder checkpoints/shapes_cursor --num-steps 1
+```
+
+**2D Shapes + Immovable**:
+```bash
+python train.py --dataset data/shapes_imm_train.h5 --encoder small --name shapes_imm
+python eval.py --dataset data/shapes_imm_eval.h5 --save-folder checkpoints/shapes_imm --num-steps 1
 ```
 
 **3D Cubes**:
