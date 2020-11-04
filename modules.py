@@ -18,7 +18,7 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False):
+                 ignore_action=False, copy_action=False, split_mlp=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -29,6 +29,7 @@ class ContrastiveSWM(nn.Module):
         self.sigma = sigma
         self.ignore_action = ignore_action
         self.copy_action = copy_action
+        self.split_mlp = split_mlp
         
         self.pos_loss = 0
         self.neg_loss = 0
@@ -58,7 +59,11 @@ class ContrastiveSWM(nn.Module):
                 hidden_dim=hidden_dim // 16,
                 num_objects=num_objects)
 
-        self.obj_encoder = EncoderMLP(
+        mlp_class = EncoderMLP
+        if self.split_mlp:
+            mlp_class = SplitEncoderMLP
+
+        self.obj_encoder = mlp_class(
             input_dim=np.prod(width_height),
             hidden_dim=hidden_dim,
             output_dim=embedding_dim,
@@ -337,6 +342,30 @@ class EncoderMLP(nn.Module):
         h = self.act1(self.fc1(h_flat))
         h = self.act2(self.ln(self.fc2(h)))
         return self.fc3(h)
+
+
+class SplitEncoderMLP(nn.Module):
+
+    def __init__(self, input_dim, output_dim, hidden_dim, num_objects,
+                 act_fn='relu'):
+        super(SplitEncoderMLP, self).__init__()
+
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.hidden_dim = hidden_dim
+        self.num_objects = num_objects
+
+        # for now, I hard-coded the immovable objects setup
+        assert num_objects == 5
+
+        self.e_immovable = EncoderMLP(input_dim, output_dim, hidden_dim, 2, act_fn=act_fn)
+        self.e_movable = EncoderMLP(input_dim, output_dim, hidden_dim, 3, act_fn=act_fn)
+
+    def forward(self, ins):
+        h_flat = ins.view(-1, self.num_objects, self.input_dim)
+        h_immovable = self.e_immovable(h_flat[:, :2, :])
+        h_movable = self.e_movable(h_flat[:, 2:, :])
+        return torch.cat([h_immovable, h_movable], dim=1)
 
 
 class DecoderMLP(nn.Module):

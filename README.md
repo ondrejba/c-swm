@@ -82,6 +82,9 @@ python vis.py --dataset data/shapes_cursor_eval.h5 --save-folder checkpoints/sha
 ```bash
 python train.py --dataset data/shapes_imm_train.h5 --encoder small --name shapes_imm
 python eval.py --dataset data/shapes_imm_eval.h5 --save-folder checkpoints/shapes_imm --num-steps 1
+
+python train.py --dataset data/shapes_imm_train.h5 --encoder small --name shapes_imm_split --split-mlp
+python eval.py --dataset data/shapes_imm_eval.h5 --save-folder checkpoints/shapes_imm_split --num-steps 1
 ```
 
 **3D Cubes**:
