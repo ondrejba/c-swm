@@ -43,6 +43,7 @@ parser.add_argument('--copy-action', action='store_true', default=False,
                     help='Apply same action to all object slots.')
 parser.add_argument('--split-mlp', action='store_true', default=False,
                     help='Create two MLPs, one for movable and the other for immovable objects.')
+parser.add_argument('--same-ep-neg', action='store_true', default=False)
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -117,6 +118,7 @@ model = modules.ContrastiveSWM(
     ignore_action=args.ignore_action,
     copy_action=args.copy_action,
     split_mlp=args.split_mlp,
+    same_ep_neg=args.same_ep_neg,
     encoder=args.encoder).to(device)
 
 model.apply(utils.weights_init)

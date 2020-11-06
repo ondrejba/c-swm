@@ -15,10 +15,12 @@ class ContrastiveSWM(nn.Module):
         hidden_dim: Number of hidden units in encoder and transition model.
         action_dim: Dimensionality of action space.
         num_objects: Number of object slots.
+        same_ep_neg: Sample negative samples from the same episode.
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False, split_mlp=False):
+                 ignore_action=False, copy_action=False, split_mlp=False,
+                 same_ep_neg=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -30,6 +32,7 @@ class ContrastiveSWM(nn.Module):
         self.ignore_action = ignore_action
         self.copy_action = copy_action
         self.split_mlp = split_mlp
+        self.same_ep_neg = same_ep_neg
         
         self.pos_loss = 0
         self.neg_loss = 0
@@ -106,8 +109,21 @@ class ContrastiveSWM(nn.Module):
 
         # Sample negative state across episodes at random
         batch_size = state.size(0)
-        perm = np.random.permutation(batch_size)
-        neg_state = state[perm]
+        if self.same_ep_neg:
+            ep_size = state.size(1)
+            neg_state = state.clone()
+
+            # same perm for all batches
+            #perm = np.random.permutation(np.arange(ep_size))
+            #neg_state[:, :] = neg_state[:, perm]
+
+            # different perm for each batch
+            perm = np.stack([np.random.permutation(np.arange(ep_size)) for _ in range(batch_size)], axis=0)
+            indices = np.arange(batch_size)[:, np.newaxis].repeat(ep_size, axis=1)
+            neg_state[:, :] = neg_state[indices, perm]
+        else:
+            perm = np.random.permutation(batch_size)
+            neg_state = state[perm]
 
         self.pos_loss = self.energy(state, action, next_state)
         zeros = torch.zeros_like(self.pos_loss)
