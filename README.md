@@ -45,6 +45,18 @@ python data_gen/env.py --env_id ShapesImmovableTrain-v0 --fname data/shapes_imm_
 python data_gen/env.py --env_id ShapesImmovableEval-v0 --fname data/shapes_imm_eval.h5 --num_episodes 10000 --seed 2
 ```
 
+**2D Shapes + Immovable Fixed**:
+```bash
+python data_gen/env.py --env_id ShapesImmovableFixedTrain-v0 --fname data/shapes_imm_fixed_train.h5 --num_episodes 1000 --seed 1
+python data_gen/env.py --env_id ShapesImmovableFixedEval-v0 --fname data/shapes_imm_fixed_eval.h5 --num_episodes 10000 --seed 2
+```
+
+**2D Shapes + Immovable Fixed + No Immovable Actions**:
+```bash
+python data_gen/env.py --env_id ShapesImmovableFixedTrain-v0 --fname data/shapes_imm_fixed_noa_train.h5 --num_episodes 1000 --seed 1 --no-immovable-actions
+python data_gen/env.py --env_id ShapesImmovableFixedEval-v0 --fname data/shapes_imm_fixed_noa_eval.h5 --num_episodes 10000 --seed 2 --no-immovable-actions
+```
+
 **3D Cubes**:
 ```bash
 python data_gen/env.py --env_id CubesTrain-v0 --fname data/cubes_train.h5 --num_episodes 1000 --seed 3

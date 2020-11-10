@@ -3,7 +3,6 @@ import torch
 import utils
 import os
 import pickle
-import matplotlib
 import matplotlib.pyplot as plt
 
 
@@ -69,6 +68,8 @@ model = modules.ContrastiveSWM(
     split_mlp=args.split_mlp,
     same_ep_neg=args.same_ep_neg,
     only_same_ep_neg=args.only_same_ep_neg,
+    immovable_bit=args.immovable_bit,
+    split_gnn=args.split_gnn,
     encoder=args.encoder).to(device)
 
 model.load_state_dict(torch.load(model_file))
@@ -83,6 +84,8 @@ rr_sum = 0
 pred_states = []
 next_states = []
 
+states = []
+
 with torch.no_grad():
 
     for batch_idx, data_batch in enumerate(eval_loader):
@@ -95,22 +98,11 @@ with torch.no_grad():
 
         obs = observations[0]
 
-        state_ext = model.obj_extractor(obs)
-        num_objects = state_ext.shape[1]
+        state = model.obj_encoder(model.obj_extractor(obs))
+        states.append(state.cpu().numpy())
 
-        # current obs | obj 1 | obj 2 | ...
-        # next obs | obj 1 | obj 2 | ...
-        plt.figure(figsize=(12, 7))
+states = np.array(states)
 
-        plt.subplot(1, 7, 1)
-        plt.imshow(utils.css_to_ssc(utils.to_np(obs[0])))
-        plt.axis("off")
-
-        for i in range(num_objects):
-
-            plt.subplot(1, 7, 2 + i)
-            plt.imshow(utils.to_np(state_ext[0, i]))
-            plt.axis("off")
-
-        plt.tight_layout()
-        plt.show()
+for obj in range(5):
+    plt.scatter(states[:, obj, 0], states[:, obj, 1])
+    plt.show()

@@ -68,11 +68,12 @@ class BlockPushing(gym.Env):
     DIRECTIONS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
-                 seed=None, immovable=False):
+                 seed=None, immovable=False, immovable_fixed=False):
         self.width = width
         self.height = height
         self.render_type = render_type
         self.immovable = immovable
+        self.immovable_fixed = immovable_fixed
 
         self.num_objects = num_objects
         self.num_actions = 4 * self.num_objects  # Move NESW
@@ -155,8 +156,18 @@ class BlockPushing(gym.Env):
 
         self.objects = [[-1, -1] for _ in range(self.num_objects)]
 
+        if self.immovable_fixed:
+            # the first two object have a fixed position
+            self.objects[0] = [1, 2]
+            self.objects[1] = [4, 4]
+            assert self.valid_pos(self.objects[0], 0)
+            assert self.valid_pos(self.objects[1], 1)
+
         # Randomize object position.
         for i in range(len(self.objects)):
+
+            if self.immovable_fixed and i < 2:
+                continue
 
             # Resample to ensure objects don't fall on same spot.
             while not self.valid_pos(self.objects[i], i):

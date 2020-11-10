@@ -1,3 +1,4 @@
+import copy as cp
 import utils
 
 import numpy as np
@@ -20,7 +21,8 @@ class ContrastiveSWM(nn.Module):
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
                  ignore_action=False, copy_action=False, split_mlp=False,
-                 same_ep_neg=False, only_same_ep_neg=False):
+                 same_ep_neg=False, only_same_ep_neg=False, immovable_bit=False,
+                 split_gnn=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -34,6 +36,7 @@ class ContrastiveSWM(nn.Module):
         self.split_mlp = split_mlp
         self.same_ep_neg = same_ep_neg
         self.only_same_ep_neg = only_same_ep_neg
+        self.split_gnn = split_gnn
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -79,7 +82,9 @@ class ContrastiveSWM(nn.Module):
             action_dim=action_dim,
             num_objects=num_objects,
             ignore_action=ignore_action,
-            copy_action=copy_action)
+            copy_action=copy_action,
+            immovable_bit=immovable_bit,
+            split_gnn=split_gnn)
 
         self.width = width_height[0]
         self.height = width_height[1]
@@ -157,7 +162,8 @@ class ContrastiveSWM(nn.Module):
 class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
     def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
-                 ignore_action=False, copy_action=False, act_fn='relu'):
+                 ignore_action=False, copy_action=False, act_fn='relu',
+                 immovable_bit=False, split_gnn=False):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -165,6 +171,11 @@ class TransitionGNN(torch.nn.Module):
         self.num_objects = num_objects
         self.ignore_action = ignore_action
         self.copy_action = copy_action
+        self.immovable_bit = immovable_bit
+        self.split_gnn = split_gnn
+
+        if self.immovable_bit:
+            self.input_dim += 1
 
         if self.ignore_action:
             self.action_dim = 0
@@ -172,14 +183,14 @@ class TransitionGNN(torch.nn.Module):
             self.action_dim = action_dim
 
         self.edge_mlp = nn.Sequential(
-            nn.Linear(input_dim*2, hidden_dim),
+            nn.Linear(self.input_dim*2, hidden_dim),
             utils.get_act_fn(act_fn),
             nn.Linear(hidden_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             utils.get_act_fn(act_fn),
             nn.Linear(hidden_dim, hidden_dim))
 
-        node_input_dim = hidden_dim + input_dim + self.action_dim
+        node_input_dim = hidden_dim + self.input_dim + self.action_dim
 
         self.node_mlp = nn.Sequential(
             nn.Linear(node_input_dim, hidden_dim),
@@ -187,15 +198,39 @@ class TransitionGNN(torch.nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, input_dim))
+            nn.Linear(hidden_dim, self.input_dim))
+
+        if self.split_gnn:
+            self.edge_mlp1 = self.edge_mlp
+            self.edge_mlp2 = cp.deepcopy(self.edge_mlp1)
+            self.edge_mlp3 = cp.deepcopy(self.edge_mlp1)
+
+            self.node_mlp1 = self.node_mlp
+            self.node_mlp2 = cp.deepcopy(self.node_mlp1)
+
+            del self.node_mlp
+            del self.edge_mlp
 
         self.edge_list = None
         self.batch_size = 0
 
-    def _edge_model(self, source, target, edge_attr):
+    def _edge_model(self, source, target, edge_attr, source_indices=None, target_indices=None):
         del edge_attr  # Unused.
         out = torch.cat([source, target], dim=1)
-        return self.edge_mlp(out)
+
+        if self.split_gnn:
+            ret = torch.zeros((out.size(0), self.hidden_dim), dtype=out.dtype, device=out.device)
+            mask1 = np.logical_and(np.logical_or(source_indices == 0, source_indices == 1),
+                                   np.logical_or(target_indices == 0, target_indices == 1))
+            mask2 = np.logical_and(np.logical_or(np.logical_or(source_indices == 2, source_indices == 3), source_indices == 4),
+                                   np.logical_or(np.logical_or(target_indices == 2, target_indices == 3), target_indices == 4))
+            mask3 = np.logical_and(np.logical_not(mask1), np.logical_not(mask2))
+
+            ret[mask1] = self.edge_mlp1(out[mask1])
+            ret[mask2] = self.edge_mlp2(out[mask2])
+            ret[mask3] = self.edge_mlp3(out[mask3])
+        else:
+            return self.edge_mlp(out)
 
     def _node_model(self, node_attr, edge_index, edge_attr):
         if edge_attr is not None:
@@ -205,7 +240,21 @@ class TransitionGNN(torch.nn.Module):
             out = torch.cat([node_attr, agg], dim=1)
         else:
             out = node_attr
-        return self.node_mlp(out)
+
+        if self.split_gnn:
+            ret = torch.zeros((out.size(0), self.input_dim), dtype=out.dtype, device=out.device)
+            obj12_indices = np.concatenate(
+                [np.arange(0, out.size(0), self.num_objects),
+                 np.arange(1, out.size(0), self.num_objects)])
+            obj345_indices = np.concatenate(
+                [np.arange(2, out.size(0), self.num_objects),
+                 np.arange(3, out.size(0), self.num_objects),
+                 np.arange(4, out.size(0), self.num_objects)])
+            ret[obj12_indices] = self.node_mlp1(out[obj12_indices])
+            ret[obj345_indices] = self.node_mlp2(out[obj345_indices])
+            return ret
+        else:
+            return self.node_mlp(out)
 
     def _get_edge_list_fully_connected(self, batch_size, num_objects, cuda):
         # Only re-evaluate if necessary (e.g. if batch size changed).
@@ -241,6 +290,12 @@ class TransitionGNN(torch.nn.Module):
         batch_size = states.size(0)
         num_nodes = states.size(1)
 
+        if self.immovable_bit:
+            # add movable/immovable bit (the first two objects are immovable, this is hardcoded for now)
+            tmp = torch.zeros_like(states[:, :, 0:1])
+            tmp[:, :2, :] = 1.0
+            states = torch.cat([states, tmp], dim=2)
+
         # states: [batch_size (B), num_objects, embedding_dim]
         # node_attr: Flatten states tensor to [B * num_objects, embedding_dim]
         node_attr = states.view(-1, self.input_dim)
@@ -255,7 +310,8 @@ class TransitionGNN(torch.nn.Module):
 
             row, col = edge_index
             edge_attr = self._edge_model(
-                node_attr[row], node_attr[col], edge_attr)
+                node_attr[row], node_attr[col], edge_attr, source_indices=row % self.num_objects,
+                target_indices=col % self.num_objects)
 
         if not self.ignore_action:
 
@@ -275,7 +331,14 @@ class TransitionGNN(torch.nn.Module):
             node_attr, edge_index, edge_attr)
 
         # [batch_size, num_nodes, hidden_dim]
-        return node_attr.view(batch_size, num_nodes, -1)
+        node_attr = node_attr.view(batch_size, num_nodes, -1)
+
+        if self.immovable_bit:
+            # object embeddings have an additional bit for movable/immovable objects
+            # we do not need to predict that
+            node_attr = node_attr[:, :, :self.input_dim - 1]
+
+        return node_attr
 
 
 class EncoderCNNSmall(nn.Module):

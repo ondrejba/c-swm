@@ -43,6 +43,20 @@ register(
 )
 
 register(
+    'ShapesImmovableFixedTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'immovable': True, 'immovable_fixed': True},
+)
+
+register(
+    'ShapesImmovableFixedEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'immovable': True, 'immovable_fixed': True},
+)
+
+register(
     'ShapesCursorImmovableTrain-v0',
     entry_point='envs.block_pushing_cursor:BlockPushingCursor',
     max_episode_steps=100,

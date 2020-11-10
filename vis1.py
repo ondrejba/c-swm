@@ -3,6 +3,8 @@ import torch
 import utils
 import os
 import pickle
+import matplotlib
+import matplotlib.pyplot as plt
 
 
 from torch.utils import data
@@ -94,69 +96,23 @@ with torch.no_grad():
             continue
 
         obs = observations[0]
-        next_obs = observations[-1]
 
-        state = model.obj_encoder(model.obj_extractor(obs))
-        next_state = model.obj_encoder(model.obj_extractor(next_obs))
+        state_ext = model.obj_extractor(obs)
+        num_objects = state_ext.shape[1]
 
-        pred_state = state
-        for i in range(args_eval.num_steps):
-            pred_trans = model.transition_model(pred_state, actions[i])
-            pred_state = pred_state + pred_trans
+        # current obs | obj 1 | obj 2 | ...
+        # next obs | obj 1 | obj 2 | ...
+        plt.figure(figsize=(12, 7))
 
-        pred_states.append(pred_state.cpu())
-        next_states.append(next_state.cpu())
+        plt.subplot(1, 7, 1)
+        plt.imshow(utils.css_to_ssc(utils.to_np(obs[0])))
+        plt.axis("off")
 
-    pred_state_cat = torch.cat(pred_states, dim=0)
-    next_state_cat = torch.cat(next_states, dim=0)
+        for i in range(num_objects):
 
-    full_size = pred_state_cat.size(0)
+            plt.subplot(1, 7, 2 + i)
+            plt.imshow(utils.to_np(state_ext[0, i]))
+            plt.axis("off")
 
-    # Flatten object/feature dimensions
-    next_state_flat = next_state_cat.view(full_size, -1)
-    pred_state_flat = pred_state_cat.view(full_size, -1)
-
-    dist_matrix = utils.pairwise_distance_matrix(
-        next_state_flat, pred_state_flat)
-    dist_matrix_diag = torch.diag(dist_matrix).unsqueeze(-1)
-    dist_matrix_augmented = torch.cat(
-        [dist_matrix_diag, dist_matrix], dim=1)
-
-    # Workaround to get a stable sort in numpy.
-    dist_np = dist_matrix_augmented.numpy()
-    indices = []
-    for row in dist_np:
-        keys = (np.arange(len(row)), row)
-        indices.append(np.lexsort(keys))
-    indices = np.stack(indices, axis=0)
-    indices = torch.from_numpy(indices).long()
-
-    print('Processed {} batches of size {}'.format(
-        batch_idx + 1, args.batch_size))
-
-    labels = torch.zeros(
-        indices.size(0), device=indices.device,
-        dtype=torch.int64).unsqueeze(-1)
-
-    num_samples += full_size
-    print('Size of current topk evaluation batch: {}'.format(
-        full_size))
-
-    for k in topk:
-        match = indices[:, :k] == labels
-        num_matches = match.sum()
-        hits_at[k] += num_matches.item()
-
-    match = indices == labels
-    _, ranks = match.max(1)
-
-    reciprocal_ranks = torch.reciprocal(ranks.double() + 1)
-    rr_sum += reciprocal_ranks.sum()
-
-    pred_states = []
-    next_states = []
-
-for k in topk:
-    print('Hits @ {}: {}'.format(k, hits_at[k] / float(num_samples)))
-
-print('MRR: {}'.format(rr_sum / float(num_samples)))
+        plt.tight_layout()
+        plt.show()

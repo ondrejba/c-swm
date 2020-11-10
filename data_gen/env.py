@@ -27,12 +27,20 @@ from PIL import Image
 class RandomAgent(object):
     """The world's simplest agent!"""
 
-    def __init__(self, action_space):
+    def __init__(self, action_space, no_immovable_actions=False):
         self.action_space = action_space
+        self.no_immovable_actions = no_immovable_actions
 
     def act(self, observation, reward, done):
         del observation, reward, done
-        return self.action_space.sample()
+
+        if self.no_immovable_actions:
+            tmp_action = self.action_space.sample()
+            while tmp_action < 8:
+                tmp_action = self.action_space.sample()
+            return tmp_action
+        else:
+            return self.action_space.sample()
 
 
 def crop_normalize(img, crop_ratio):
@@ -51,6 +59,7 @@ if __name__ == '__main__':
                         help='Total number of episodes to simulate.')
     parser.add_argument('--atari', action='store_true', default=False,
                         help='Run atari mode (stack multiple frames).')
+    parser.add_argument('--no-immovable-actions', action='store_true', default=False)
     parser.add_argument('--seed', type=int, default=1,
                         help='Random seed.')
     args = parser.parse_args()
@@ -63,7 +72,7 @@ if __name__ == '__main__':
     env.action_space.seed(args.seed)
     env.seed(args.seed)
 
-    agent = RandomAgent(env.action_space)
+    agent = RandomAgent(env.action_space, no_immovable_actions=args.no_immovable_actions)
 
     episode_count = args.num_episodes
     reward = 0
