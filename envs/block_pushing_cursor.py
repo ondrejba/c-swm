@@ -24,10 +24,10 @@ class BlockPushingCursor(BlockPushing):
     }
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
-                 seed=None):
+                 seed=None, immovable=False):
 
         super(BlockPushingCursor, self).__init__(width=width, height=height, render_type=render_type,
-                                                 num_objects=num_objects, seed=seed)
+                                                 num_objects=num_objects, seed=seed, immovable=immovable)
 
         # overwrite action space
         self.num_actions = 8

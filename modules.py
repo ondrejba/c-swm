@@ -20,7 +20,7 @@ class ContrastiveSWM(nn.Module):
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
                  ignore_action=False, copy_action=False, split_mlp=False,
-                 same_ep_neg=False):
+                 same_ep_neg=False, only_same_ep_neg=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -33,7 +33,8 @@ class ContrastiveSWM(nn.Module):
         self.copy_action = copy_action
         self.split_mlp = split_mlp
         self.same_ep_neg = same_ep_neg
-        
+        self.only_same_ep_neg = only_same_ep_neg
+
         self.pos_loss = 0
         self.neg_loss = 0
 
@@ -109,6 +110,17 @@ class ContrastiveSWM(nn.Module):
 
         # Sample negative state across episodes at random
         batch_size = state.size(0)
+        perm = np.random.permutation(batch_size)
+        neg_state = state[perm]
+
+        self.pos_loss = self.energy(state, action, next_state)
+        zeros = torch.zeros_like(self.pos_loss)
+        
+        self.pos_loss = self.pos_loss.mean()
+        self.neg_loss = torch.max(
+            zeros, self.hinge - self.energy(
+                state, action, neg_state, no_trans=True)).mean()
+
         if self.same_ep_neg:
             ep_size = state.size(1)
             neg_state = state.clone()
@@ -121,17 +133,18 @@ class ContrastiveSWM(nn.Module):
             perm = np.stack([np.random.permutation(np.arange(ep_size)) for _ in range(batch_size)], axis=0)
             indices = np.arange(batch_size)[:, np.newaxis].repeat(ep_size, axis=1)
             neg_state[:, :] = neg_state[indices, perm]
-        else:
-            perm = np.random.permutation(batch_size)
-            neg_state = state[perm]
 
-        self.pos_loss = self.energy(state, action, next_state)
-        zeros = torch.zeros_like(self.pos_loss)
-        
-        self.pos_loss = self.pos_loss.mean()
-        self.neg_loss = torch.max(
-            zeros, self.hinge - self.energy(
-                state, action, neg_state, no_trans=True)).mean()
+            if self.only_same_ep_neg:
+                # overwrite the negative loss calculated above
+                self.neg_loss = torch.max(
+                    zeros, self.hinge - self.energy(
+                        state, action, neg_state, no_trans=True)).mean()
+            else:
+                # average negative loss over in-episode and out-of-episode samples
+                self.neg_loss += torch.max(
+                    zeros, self.hinge - self.energy(
+                    state, action, neg_state, no_trans=True)).mean()
+                self.neg_loss /= 2
 
         loss = self.pos_loss + self.neg_loss
 

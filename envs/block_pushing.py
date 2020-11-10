@@ -68,10 +68,11 @@ class BlockPushing(gym.Env):
     DIRECTIONS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
-                 seed=None):
+                 seed=None, immovable=False):
         self.width = width
         self.height = height
         self.render_type = render_type
+        self.immovable = immovable
 
         self.num_objects = num_objects
         self.num_actions = 4 * self.num_objects  # Move NESW
@@ -194,6 +195,10 @@ class BlockPushing(gym.Env):
             obj_id: ID of object.
             offset: (x, y) tuple of offsets.
         """
+
+        # the first two objects are immovable
+        if obj_id in [0, 1]:
+            return False
 
         if not self.valid_move(obj_id, offset):
             return False

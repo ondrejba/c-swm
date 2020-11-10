@@ -67,6 +67,8 @@ model = modules.ContrastiveSWM(
     ignore_action=args.ignore_action,
     copy_action=args.copy_action,
     split_mlp=args.split_mlp,
+    same_ep_neg=args.same_ep_neg,
+    only_same_ep_neg=args.only_same_ep_neg,
     encoder=args.encoder).to(device)
 
 model.load_state_dict(torch.load(model_file))
