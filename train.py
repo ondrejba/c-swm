@@ -6,6 +6,7 @@ import os
 import pickle
 
 import numpy as np
+import matplotlib.pyplot as plt
 import logging
 
 from torch.utils import data
@@ -47,6 +48,8 @@ parser.add_argument('--split-gnn', action='store_true', default=False)
 parser.add_argument('--immovable-bit', action='store_true', default=False)
 parser.add_argument('--same-ep-neg', action='store_true', default=False)
 parser.add_argument('--only-same-ep-neg', action='store_true', default=False)
+parser.add_argument('--no-loss-first-two', action='store_true', default=False)
+parser.add_argument('--bilinear-energy', action='store_true', default=False)
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -91,6 +94,7 @@ if not os.path.exists(save_folder):
 meta_file = os.path.join(save_folder, 'metadata.pkl')
 model_file = os.path.join(save_folder, 'model.pt')
 log_file = os.path.join(save_folder, 'log.txt')
+loss_file = os.path.join(save_folder, 'loss.pdf')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger()
@@ -125,6 +129,8 @@ model = modules.ContrastiveSWM(
     only_same_ep_neg=args.only_same_ep_neg,
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
+    no_loss_first_two=args.no_loss_first_two,
+    bilinear_loss=args.bilinear_energy,
     encoder=args.encoder).to(device)
 
 model.apply(utils.weights_init)
@@ -162,6 +168,7 @@ if args.decoder:
 print('Starting model training...')
 step = 0
 best_loss = 1e9
+losses = []
 
 for epoch in range(1, args.epochs + 1):
     model.train()
@@ -194,6 +201,8 @@ for epoch in range(1, args.epochs + 1):
         train_loss += loss.item()
         optimizer.step()
 
+        losses.append(loss.item())
+
         if args.decoder:
             optimizer_dec.step()
 
@@ -214,3 +223,10 @@ for epoch in range(1, args.epochs + 1):
     if avg_loss < best_loss:
         best_loss = avg_loss
         torch.save(model.state_dict(), model_file)
+
+plt.subplot(2, 1, 1)
+plt.plot(losses)
+plt.subplot(2, 1, 2)
+plt.plot(losses)
+plt.yscale("log")
+plt.savefig(loss_file)

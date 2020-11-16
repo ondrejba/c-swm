@@ -22,7 +22,7 @@ class ContrastiveSWM(nn.Module):
                  num_objects, hinge=1., sigma=0.5, encoder='large',
                  ignore_action=False, copy_action=False, split_mlp=False,
                  same_ep_neg=False, only_same_ep_neg=False, immovable_bit=False,
-                 split_gnn=False):
+                 split_gnn=False, no_loss_first_two=False, bilinear_loss=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -37,6 +37,8 @@ class ContrastiveSWM(nn.Module):
         self.same_ep_neg = same_ep_neg
         self.only_same_ep_neg = only_same_ep_neg
         self.split_gnn = split_gnn
+        self.no_loss_first_two = no_loss_first_two
+        self.bilinear_loss = bilinear_loss
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -86,6 +88,13 @@ class ContrastiveSWM(nn.Module):
             immovable_bit=immovable_bit,
             split_gnn=split_gnn)
 
+        if self.bilinear_loss:
+            self.bilinear_matrix = nn.Parameter(
+                torch.empty((self.embedding_dim * self.num_objects, self.embedding_dim * self.num_objects),
+                            dtype=torch.float32),
+                requires_grad=True
+            )
+
         self.width = width_height[0]
         self.height = width_height[1]
 
@@ -100,7 +109,27 @@ class ContrastiveSWM(nn.Module):
             pred_trans = self.transition_model(state, action)
             diff = state + pred_trans - next_state
 
-        return norm * diff.pow(2).sum(2).mean(1)
+        if self.no_loss_first_two:
+            diff = diff.pow(2).sum(2)
+            diff[:, :2] = 0
+            diff = diff.sum(1) / 3
+            return norm * diff
+        else:
+            return norm * diff.pow(2).sum(2).mean(1)
+
+    def bilinear_energy(self, state, action, next_state, no_trans=False):
+
+        new_shape = (state.size(0), state.size(1) * state.size(2))
+
+        if no_trans:
+            left = state.reshape(new_shape)
+            right = next_state.reshape(new_shape)
+        else:
+            pred_trans = self.transition_model(state, action)
+            left = (state + pred_trans).reshape(new_shape)
+            right = next_state.reshape(new_shape)
+
+        return (left.matmul(self.bilinear_matrix) * right).sum(1)
 
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
@@ -118,42 +147,50 @@ class ContrastiveSWM(nn.Module):
         perm = np.random.permutation(batch_size)
         neg_state = state[perm]
 
-        self.pos_loss = self.energy(state, action, next_state)
-        zeros = torch.zeros_like(self.pos_loss)
-        
-        self.pos_loss = self.pos_loss.mean()
-        self.neg_loss = torch.max(
-            zeros, self.hinge - self.energy(
-                state, action, neg_state, no_trans=True)).mean()
+        if self.bilinear_loss:
+            self.pos_loss = self.bilinear_energy(state, action, next_state)
+            self.neg_loss = self.bilinear_energy(state, action, neg_state)
+            print(self.pos_loss.mean(), self.neg_loss.mean())
+            loss = - self.pos_loss + self.neg_loss
+            loss = loss.mean()
+            return loss
+        else:
+            self.pos_loss = self.energy(state, action, next_state)
+            zeros = torch.zeros_like(self.pos_loss)
 
-        if self.same_ep_neg:
-            ep_size = state.size(1)
-            neg_state = state.clone()
-
-            # same perm for all batches
-            #perm = np.random.permutation(np.arange(ep_size))
-            #neg_state[:, :] = neg_state[:, perm]
-
-            # different perm for each batch
-            perm = np.stack([np.random.permutation(np.arange(ep_size)) for _ in range(batch_size)], axis=0)
-            indices = np.arange(batch_size)[:, np.newaxis].repeat(ep_size, axis=1)
-            neg_state[:, :] = neg_state[indices, perm]
-
-            if self.only_same_ep_neg:
-                # overwrite the negative loss calculated above
-                self.neg_loss = torch.max(
-                    zeros, self.hinge - self.energy(
-                        state, action, neg_state, no_trans=True)).mean()
-            else:
-                # average negative loss over in-episode and out-of-episode samples
-                self.neg_loss += torch.max(
-                    zeros, self.hinge - self.energy(
+            self.pos_loss = self.pos_loss.mean()
+            self.neg_loss = torch.max(
+                zeros, self.hinge - self.energy(
                     state, action, neg_state, no_trans=True)).mean()
-                self.neg_loss /= 2
 
-        loss = self.pos_loss + self.neg_loss
+            if self.same_ep_neg:
+                ep_size = state.size(1)
+                neg_state = state.clone()
 
-        return loss
+                # same perm for all batches
+                #perm = np.random.permutation(np.arange(ep_size))
+                #neg_state[:, :] = neg_state[:, perm]
+
+                # different perm for each batch
+                perm = np.stack([np.random.permutation(np.arange(ep_size)) for _ in range(batch_size)], axis=0)
+                indices = np.arange(batch_size)[:, np.newaxis].repeat(ep_size, axis=1)
+                neg_state[:, :] = neg_state[indices, perm]
+
+                if self.only_same_ep_neg:
+                    # overwrite the negative loss calculated above
+                    self.neg_loss = torch.max(
+                        zeros, self.hinge - self.energy(
+                            state, action, neg_state, no_trans=True)).mean()
+                else:
+                    # average negative loss over in-episode and out-of-episode samples
+                    self.neg_loss += torch.max(
+                        zeros, self.hinge - self.energy(
+                        state, action, neg_state, no_trans=True)).mean()
+                    self.neg_loss /= 2
+
+            loss = self.pos_loss + self.neg_loss
+
+            return loss
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))
@@ -229,6 +266,7 @@ class TransitionGNN(torch.nn.Module):
             ret[mask1] = self.edge_mlp1(out[mask1])
             ret[mask2] = self.edge_mlp2(out[mask2])
             ret[mask3] = self.edge_mlp3(out[mask3])
+            return ret
         else:
             return self.edge_mlp(out)
 
@@ -310,8 +348,8 @@ class TransitionGNN(torch.nn.Module):
 
             row, col = edge_index
             edge_attr = self._edge_model(
-                node_attr[row], node_attr[col], edge_attr, source_indices=row % self.num_objects,
-                target_indices=col % self.num_objects)
+                node_attr[row], node_attr[col], edge_attr, source_indices=(row % self.num_objects).cpu().numpy(),
+                target_indices=(col % self.num_objects).cpu().numpy())
 
         if not self.ignore_action:
 
