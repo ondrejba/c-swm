@@ -203,9 +203,26 @@ class RotEncoderMLP(nn.Module):
         h = self.act2(self.ln(self.fc2(h)))
         return self.fc3(h)
 
+    def rot90(self, x, exp = 1):
+        if (exp == 0):
+            return x
+        else:
+            return rot90(x.flip(3).permute(0,1,3,2), exp - 1)
+
     def orbit_stack(self, x):
         """
         Input: (batch, num_objects, H, H)
         H should be odd and input is square image
         """
-        n_orbits = ((x.size(-1) - 1) / 2)**2 + ((x.size(-1) - 1) / 2) + 1
+        H = x.size(-1)
+        c = (H - 1) // 2
+        n_orbits = 1 + c + (c)**2
+        
+        out = torch.zeros((x.size(0),x.size(1),n_orbits,4))
+        
+        out[:,:,0,:] = ((x[:,:,c,c]).unsqueeze(2)).expand(-1,-1,4)
+        for i in range(4):
+            out[:,:,1:,i] = rot90(x,i)[:,:,:c,:c+1].reshape(x.size(0),x.size(1),-1)
+        
+        return out
+
