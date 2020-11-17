@@ -27,6 +27,12 @@ python data_gen/env.py --env_id ShapesTrain-v0 --fname data/shapes_train.h5 --nu
 python data_gen/env.py --env_id ShapesEval-v0 --fname data/shapes_eval.h5 --num_episodes 10000 --seed 2
 ```
 
+**2D Shapes + Opposite**:
+```bash
+python data_gen/env.py --env_id ShapesOppositeTrain-v0 --fname data/shapes_opposite_train.h5 --num_episodes 1000 --seed 1
+python data_gen/env.py --env_id ShapesOppositeEval-v0 --fname data/shapes_opposite_eval.h5 --num_episodes 10000 --seed 2
+```
+
 **2D Shapes + Cursor**:
 ```bash
 python data_gen/env.py --env_id ShapesCursorTrain-v0 --fname data/shapes_cursor_train.h5 --num_episodes 1000 --seed 1

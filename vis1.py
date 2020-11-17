@@ -100,6 +100,9 @@ with torch.no_grad():
         obs = observations[0]
 
         state_ext = model.obj_extractor(obs)
+        state = model.obj_encoder(state_ext)
+        print("object embeddings:", state[0])
+
         num_objects = state_ext.shape[1]
 
         # current obs | obj 1 | obj 2 | ...

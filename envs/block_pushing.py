@@ -68,12 +68,13 @@ class BlockPushing(gym.Env):
     DIRECTIONS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
-                 seed=None, immovable=False, immovable_fixed=False):
+                 seed=None, immovable=False, immovable_fixed=False, opposite_direction=False):
         self.width = width
         self.height = height
         self.render_type = render_type
         self.immovable = immovable
         self.immovable_fixed = immovable_fixed
+        self.opposite_direction = opposite_direction
 
         self.num_objects = num_objects
         self.num_actions = 4 * self.num_objects  # Move NESW
@@ -208,8 +209,13 @@ class BlockPushing(gym.Env):
         """
 
         # the first two objects are immovable
-        if obj_id in [0, 1]:
-            return False
+        if self.immovable:
+            if obj_id in [0, 1]:
+                return False
+
+        if self.opposite_direction:
+            if obj_id in [0, 1]:
+                offset = (-offset[0], -offset[1])
 
         if not self.valid_move(obj_id, offset):
             return False

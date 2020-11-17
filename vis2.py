@@ -103,7 +103,12 @@ with torch.no_grad():
         state = model.obj_encoder(model.obj_extractor(obs))
         states.append(state.cpu().numpy())
 
-states = np.array(states)
+states = np.concatenate(states, axis=0)
+print(states.shape)
+
+for obj in range(5):
+    plt.scatter(states[:, obj, 0], states[:, obj, 1])
+plt.show()
 
 for obj in range(5):
     plt.scatter(states[:, obj, 0], states[:, obj, 1])

@@ -24,7 +24,7 @@ parser.add_argument('--learning-rate', type=float, default=5e-4,
                     help='Learning rate.')
 
 parser.add_argument('--encoder', type=str, default='small',
-                    help='Object extrator CNN size (e.g., `small`).')
+                    help='Object extractor CNN size (e.g., `small`).')
 parser.add_argument('--sigma', type=float, default=0.5,
                     help='Energy scale.')
 parser.add_argument('--hinge', type=float, default=1.,

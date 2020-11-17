@@ -43,6 +43,20 @@ register(
 )
 
 register(
+    'ShapesOppositeTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'opposite_direction': True},
+)
+
+register(
+    'ShapesOppositeEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'opposite_direction': True},
+)
+
+register(
     'ShapesImmovableFixedTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
