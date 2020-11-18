@@ -160,6 +160,23 @@ class StateTransitionsDataset(data.Dataset):
         return obs, action, next_obs
 
 
+class StateTransitionsDatasetStateIds(StateTransitionsDataset):
+
+    def __init__(self, hdf5_file):
+
+        super(StateTransitionsDatasetStateIds, self).__init__(hdf5_file)
+
+    def __getitem__(self, idx):
+        ep, step = self.idx2episode[idx]
+
+        obs = to_float(self.experience_buffer[ep]['obs'][step])
+        action = self.experience_buffer[ep]['action'][step]
+        next_obs = to_float(self.experience_buffer[ep]['next_obs'][step])
+        state_ids = self.experience_buffer[ep]['state_ids'][step]
+
+        return obs, action, next_obs, state_ids
+
+
 class PathDataset(data.Dataset):
     """Create dataset of {(o_t, a_t)}_{t=1:N} paths from replay buffer.
     """
@@ -189,6 +206,38 @@ class PathDataset(data.Dataset):
         observations.append(obs)
         return observations, actions
 
+
+class PathDatasetStateIds(PathDataset):
+    """Create dataset of {(o_t, a_t)}_{t=1:N} paths from replay buffer.
+    """
+
+    def __init__(self, hdf5_file, path_length=5):
+        """
+        Args:
+            hdf5_file (string): Path to the hdf5 file that contains experience
+                buffer
+        """
+        super(PathDatasetStateIds, self).__init__(hdf5_file, path_length)
+
+    def __getitem__(self, idx):
+        observations = []
+        actions = []
+        state_ids = []
+        for i in range(self.path_length):
+            obs = to_float(self.experience_buffer[idx]['obs'][i])
+            action = self.experience_buffer[idx]['action'][i]
+            state_id = self.experience_buffer[idx]['state_ids'][i]
+            observations.append(obs)
+            actions.append(action)
+            state_ids.append(state_id)
+
+        obs = to_float(self.experience_buffer[idx]['next_obs'][self.path_length - 1])
+        state_id = self.experience_buffer[idx]['next_state_ids'][self.path_length - 1]
+
+        observations.append(obs)
+        state_ids.append(state_id)
+
+        return observations, actions, state_ids
 
 def css_to_ssc(image):
     return image.transpose((1, 2, 0))

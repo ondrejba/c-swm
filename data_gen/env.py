@@ -60,6 +60,7 @@ if __name__ == '__main__':
     parser.add_argument('--atari', action='store_true', default=False,
                         help='Run atari mode (stack multiple frames).')
     parser.add_argument('--no-immovable-actions', action='store_true', default=False)
+    parser.add_argument('--save-state-ids', action='store_true', default=False)
     parser.add_argument('--seed', type=int, default=1,
                         help='Random seed.')
     args = parser.parse_args()
@@ -94,15 +95,25 @@ if __name__ == '__main__':
 
     for i in range(episode_count):
 
-        replay_buffer.append({
-            'obs': [],
-            'action': [],
-            'next_obs': [],
-        })
+        if args.save_state_ids:
+            replay_buffer.append({
+                'obs': [],
+                'action': [],
+                'next_obs': [],
+                'state_ids': [],
+                'next_state_ids': []
+            })
+        else:
+            replay_buffer.append({
+                'obs': [],
+                'action': [],
+                'next_obs': [],
+            })
 
         ob = env.reset()
 
         if args.atari:
+            assert not args.save_state_ids # not implemented
             # Burn-in steps
             for _ in range(warmstart):
                 action = agent.act(ob, reward, done)
@@ -131,8 +142,14 @@ if __name__ == '__main__':
             while True:
                 replay_buffer[i]['obs'].append(ob[1])
 
+                if args.save_state_ids:
+                    replay_buffer[i]['state_ids'].append(env.env.get_state_id())
+
                 action = agent.act(ob, reward, done)
                 ob, reward, done, _ = env.step(action)
+
+                if args.save_state_ids:
+                    replay_buffer[i]['next_state_ids'].append(env.env.get_state_id())
 
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['next_obs'].append(ob[1])

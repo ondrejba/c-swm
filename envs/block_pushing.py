@@ -237,3 +237,13 @@ class BlockPushing(gym.Env):
         state_obs = (self.get_state(), self.render())
 
         return state_obs, reward, done, None
+
+    def get_state_id(self):
+
+        state_id = []
+
+        for obj in self.objects:
+            state_id.append(obj[0])
+            state_id.append(obj[1])
+
+        return np.array(state_id)

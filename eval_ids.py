@@ -45,7 +45,7 @@ if args.cuda:
 
 device = torch.device('cuda' if args.cuda else 'cpu')
 
-dataset = utils.PathDataset(
+dataset = utils.PathDatasetStateIds(
     hdf5_file=args.dataset, path_length=args_eval.num_steps)
 eval_loader = data.DataLoader(
     dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
@@ -84,19 +84,21 @@ rr_sum = 0
 
 pred_states = []
 next_states = []
+next_ids = []
 
 with torch.no_grad():
 
     for batch_idx, data_batch in enumerate(eval_loader):
         data_batch = [[t.to(
             device) for t in tensor] for tensor in data_batch]
-        observations, actions = data_batch
+        observations, actions, state_ids = data_batch
 
         if observations[0].size(0) != args.batch_size:
             continue
 
         obs = observations[0]
         next_obs = observations[-1]
+        next_id = state_ids[-1]
 
         state = model.obj_encoder(model.obj_extractor(obs))
         next_state = model.obj_encoder(model.obj_extractor(next_obs))
@@ -108,9 +110,11 @@ with torch.no_grad():
 
         pred_states.append(pred_state.cpu())
         next_states.append(next_state.cpu())
+        next_ids.append(next_id.cpu().numpy())
 
     pred_state_cat = torch.cat(pred_states, dim=0)
     next_state_cat = torch.cat(next_states, dim=0)
+    next_ids_cat = np.concatenate(next_ids, axis=0)
 
     full_size = pred_state_cat.size(0)
 
@@ -136,6 +140,12 @@ with torch.no_grad():
         keys = (np.arange(len(row)), row)
         indices.append(np.lexsort(keys))
     indices = np.stack(indices, axis=0)
+
+    mask_mistakes = indices[:, 0] != 0
+    closest_next_ids = next_ids_cat[indices[:, 0] - 1]
+    equal_mask = np.all(closest_next_ids == next_ids_cat, axis=1)
+    indices[:, 0][np.logical_and(equal_mask, mask_mistakes)] = 0
+
     indices = torch.from_numpy(indices).long()
 
     print('Processed {} batches of size {}'.format(

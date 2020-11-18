@@ -3,6 +3,7 @@ import torch
 import utils
 import os
 import pickle
+import matplotlib.pyplot as plt
 
 
 from torch.utils import data
@@ -76,6 +77,25 @@ model = modules.ContrastiveSWM(
 model.load_state_dict(torch.load(model_file))
 model.eval()
 
+all_states = []
+
+with torch.no_grad():
+
+    for batch_idx, data_batch in enumerate(eval_loader):
+        data_batch = [[t.to(
+            device) for t in tensor] for tensor in data_batch]
+        observations, actions = data_batch
+
+        if observations[0].size(0) != args.batch_size:
+            continue
+
+        obs = observations[0]
+
+        state = model.obj_encoder(model.obj_extractor(obs))
+        all_states.append(state.cpu().numpy())
+
+all_states = np.concatenate(all_states, axis=0)
+
 # topk = [1, 5, 10]
 topk = [1]
 hits_at = defaultdict(int)
@@ -121,8 +141,8 @@ with torch.no_grad():
     dist_matrix = utils.pairwise_distance_matrix(
         next_state_flat, pred_state_flat)
 
-    #num_digits = 1
-    #dist_matrix = (dist_matrix * 10 ** num_digits).round() / (10 ** num_digits)
+    #num_digits = 3
+    #dist_matrix = (dist_matrix * 10**num_digits).round() / (10**num_digits)
     #dist_matrix = dist_matrix.float()
 
     dist_matrix_diag = torch.diag(dist_matrix).unsqueeze(-1)
@@ -157,13 +177,40 @@ with torch.no_grad():
     match = indices == labels
     _, ranks = match.max(1)
 
-    reciprocal_ranks = torch.reciprocal(ranks.double() + 1)
-    rr_sum += reciprocal_ranks.sum()
+    indices = indices.cpu().numpy().astype(np.int)
+    first_indices = indices[:, 0]
 
-    pred_states = []
-    next_states = []
+    for i in range(labels.size(0)):
 
-for k in topk:
-    print('Hits @ {}: {}'.format(k, hits_at[k] / float(num_samples)))
+        # real next state
+        rns = next_state_cat[i]
 
-print('MRR: {}'.format(rr_sum / float(num_samples)))
+        # pred next state
+        pns = pred_state_cat[i]
+
+        # matched next state
+        if first_indices[i] == 0:
+            print("good")
+            mns = next_state_cat[i]
+        else:
+            print("bad")
+            index = first_indices[i] - 1
+            mns = next_state_cat[index]
+
+        print(indices[i, :10])
+        print(dist_matrix_augmented[i, indices[i, :10]])
+
+        for j in range(5):
+            plt.subplot(3, 5, 1 + j)
+            plt.scatter(all_states[:, j, 0], all_states[:, j, 1])
+            plt.scatter(rns[j, 0], rns[j, 1])
+
+            plt.subplot(3, 5, 6 + j)
+            plt.scatter(all_states[:, j, 0], all_states[:, j, 1])
+            plt.scatter(pns[j, 0], pns[j, 1])
+
+            plt.subplot(3, 5, 11 + j)
+            plt.scatter(all_states[:, j, 0], all_states[:, j, 1])
+            plt.scatter(mns[j, 0], mns[j, 1])
+
+        plt.show()

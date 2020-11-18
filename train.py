@@ -50,6 +50,7 @@ parser.add_argument('--same-ep-neg', action='store_true', default=False)
 parser.add_argument('--only-same-ep-neg', action='store_true', default=False)
 parser.add_argument('--no-loss-first-two', action='store_true', default=False)
 parser.add_argument('--bilinear-energy', action='store_true', default=False)
+parser.add_argument('--bisim', action='store_true', default=False)
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -105,8 +106,13 @@ pickle.dump({'args': args}, open(meta_file, "wb"))
 
 device = torch.device('cuda' if args.cuda else 'cpu')
 
-dataset = utils.StateTransitionsDataset(
-    hdf5_file=args.dataset)
+if args.bisim:
+    dataset = utils.StateTransitionsDatasetStateIds(
+        hdf5_file=args.dataset)
+else:
+    dataset = utils.StateTransitionsDataset(
+        hdf5_file=args.dataset)
+
 train_loader = data.DataLoader(
     dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
@@ -179,6 +185,7 @@ for epoch in range(1, args.epochs + 1):
         optimizer.zero_grad()
 
         if args.decoder:
+            assert not args.bisim # not implemented
             optimizer_dec.zero_grad()
             obs, action, next_obs = data_batch
             objs = model.obj_extractor(obs)
