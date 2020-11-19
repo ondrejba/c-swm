@@ -22,7 +22,8 @@ class ContrastiveSWM(nn.Module):
                  num_objects, hinge=1., sigma=0.5, encoder='large',
                  ignore_action=False, copy_action=False, split_mlp=False,
                  same_ep_neg=False, only_same_ep_neg=False, immovable_bit=False,
-                 split_gnn=False, no_loss_first_two=False, bilinear_loss=False):
+                 split_gnn=False, no_loss_first_two=False, bilinear_loss=False,
+                 gamma=1.0, reject_negative=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -39,6 +40,8 @@ class ContrastiveSWM(nn.Module):
         self.split_gnn = split_gnn
         self.no_loss_first_two = no_loss_first_two
         self.bilinear_loss = bilinear_loss
+        self.gamma = gamma
+        self.reject_negative = reject_negative
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -88,13 +91,6 @@ class ContrastiveSWM(nn.Module):
             immovable_bit=immovable_bit,
             split_gnn=split_gnn)
 
-        if self.bilinear_loss:
-            self.bilinear_matrix = nn.Parameter(
-                torch.empty((self.embedding_dim * self.num_objects, self.embedding_dim * self.num_objects),
-                            dtype=torch.float32),
-                requires_grad=True
-            )
-
         self.width = width_height[0]
         self.height = width_height[1]
 
@@ -134,12 +130,8 @@ class ContrastiveSWM(nn.Module):
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
 
-    def contrastive_loss(self, obs, action, next_obs, state_ids=None):
-
-        #import matplotlib.pyplot as plt
-        #for i in range(len(obs)):
-        #    plt.imshow(obs[i].cpu().numpy().transpose((1, 2, 0)))
-        #    plt.show()
+    def contrastive_loss(self, obs, action, next_obs, state_ids=None, next_state_ids=None, custom_negs=False,
+                         custom_neg_state_ids=None):
 
         objs = self.obj_extractor(obs)
         next_objs = self.obj_extractor(next_obs)
@@ -152,72 +144,59 @@ class ContrastiveSWM(nn.Module):
         perm = np.random.permutation(batch_size)
         neg_state = state[perm]
 
-        if state_ids is not None:
-            neg_state_ids = state_ids[perm]
-            neg_mask = 1.0 - torch.all(state_ids == neg_state_ids, dim=1).float()
-            print("num rejected:", len(neg_mask) - neg_mask.sum().item())
+        self.pos_loss = self.energy(state, action, next_state)
+        zeros = torch.zeros_like(self.pos_loss)
 
-        if self.bilinear_loss:
-            self.pos_loss = self.bilinear_energy(state, action, next_state)
-            self.neg_loss = self.bilinear_energy(state, action, neg_state)
-            print(self.pos_loss.mean(), self.neg_loss.mean())
-            loss = - self.pos_loss + self.neg_loss
-            loss = loss.mean()
-            return loss
-        else:
-            self.pos_loss = self.energy(state, action, next_state)
-            zeros = torch.zeros_like(self.pos_loss)
+        self.pos_loss = self.pos_loss.mean()
 
-            self.pos_loss = self.pos_loss.mean()
+        if custom_negs is not None:
+
+            custom_neg_objs = self.obj_extractor(custom_negs)
+            custom_neg_state = self.obj_encoder(custom_neg_objs)
+
             self.neg_loss = torch.max(
                 zeros, self.hinge - self.energy(
-                    state, action, neg_state, no_trans=True))
+                    state, None, custom_neg_state, no_trans=True))
 
-            if state_ids is not None:
+            if self.reject_negative:
+                neg_mask = 1.0 - torch.all(state_ids == custom_neg_state_ids, dim=1).float()
                 self.neg_loss = self.neg_loss * neg_mask
                 self.neg_loss = self.neg_loss.sum() / neg_mask.sum()
             else:
                 self.neg_loss = self.neg_loss.mean()
 
-            if self.same_ep_neg:
-                ep_size = state.size(1)
-                neg_state = state.clone()
+        else:
 
-                # different perm for each batch
-                perm = np.stack([np.random.permutation(np.arange(ep_size)) for _ in range(batch_size)], axis=0)
-                indices = np.arange(batch_size)[:, np.newaxis].repeat(ep_size, axis=1)
-                neg_state[:, :] = neg_state[indices, perm]
+            self.neg_loss = torch.max(
+                zeros, self.hinge - self.energy(
+                    state, action, neg_state, no_trans=True))
 
-                if state_ids is not None:
-                    neg_state_ids = state_ids.clone()
-                    neg_state_ids[:, :] = state_ids[indices, perm]
-                    neg_mask = 1.0 - torch.all(state_ids == neg_state_ids, dim=1).float()
+            if self.reject_negative:
+                neg_state_ids = state_ids[perm]
+                neg_mask = 1.0 - torch.all(state_ids == neg_state_ids, dim=1).float()
+                self.neg_loss = self.neg_loss * neg_mask
+                self.neg_loss = self.neg_loss.sum() / neg_mask.sum()
+            else:
+                self.neg_loss = self.neg_loss.mean()
+
+            if state_ids is not None and next_state_ids is not None:
+                mask = 1.0 - torch.all(state_ids == next_state_ids, dim=1).float()
+
+                tmp_neg_loss = torch.max(
+                    zeros, self.hinge - self.energy(
+                        state, None, next_state, no_trans=True))
+                tmp_neg_loss *= mask
+                tmp_neg_loss = tmp_neg_loss.sum() / mask.sum()
 
                 if self.only_same_ep_neg:
-                    # overwrite the negative loss calculated above
-                    self.neg_loss = torch.max(
-                        zeros, self.hinge - self.energy(
-                            state, action, neg_state, no_trans=True))
-
-                    if state_ids is not None:
-                        self.neg_loss = self.neg_loss * neg_mask
-                        self.neg_loss = self.neg_loss.sum() / neg_mask.sum()
+                    self.neg_loss = tmp_neg_loss
                 else:
-                    # average negative loss over in-episode and out-of-episode samples
-                    neg_loss = torch.max(
-                        zeros, self.hinge - self.energy(
-                        state, action, neg_state, no_trans=True)).mean()
-
-                    if state_ids is not None:
-                        neg_loss = neg_loss * neg_mask
-                        neg_loss = neg_loss.sum() / neg_mask.sum()
-
-                    self.neg_loss += neg_loss
+                    self.neg_loss += tmp_neg_loss
                     self.neg_loss /= 2
 
-            loss = self.pos_loss + self.neg_loss
+        loss = self.pos_loss + self.gamma * self.neg_loss
 
-            return loss
+        return loss
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))

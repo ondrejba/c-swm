@@ -51,6 +51,9 @@ parser.add_argument('--only-same-ep-neg', action='store_true', default=False)
 parser.add_argument('--no-loss-first-two', action='store_true', default=False)
 parser.add_argument('--bilinear-energy', action='store_true', default=False)
 parser.add_argument('--bisim', action='store_true', default=False)
+parser.add_argument('--gamma', type=float, default=1.0)
+parser.add_argument('--reject-negative', default=False, action='store_true')
+parser.add_argument('--custom-neg', default=False, action='store_true')
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -107,9 +110,14 @@ pickle.dump({'args': args}, open(meta_file, "wb"))
 device = torch.device('cuda' if args.cuda else 'cpu')
 
 if args.bisim:
-    dataset = utils.StateTransitionsDatasetStateIds(
-        hdf5_file=args.dataset)
+    if args.custom_neg:
+        dataset = utils.StateTransitionsDatasetStateIdsNegs(
+            hdf5_file=args.dataset)
+    else:
+        dataset = utils.StateTransitionsDatasetStateIds(
+            hdf5_file=args.dataset)
 else:
+    assert not args.custom_neg
     dataset = utils.StateTransitionsDataset(
         hdf5_file=args.dataset)
 
@@ -137,6 +145,8 @@ model = modules.ContrastiveSWM(
     split_gnn=args.split_gnn,
     no_loss_first_two=args.no_loss_first_two,
     bilinear_loss=args.bilinear_energy,
+    gamma=args.gamma,
+    reject_negative=args.reject_negative,
     encoder=args.encoder).to(device)
 
 model.apply(utils.weights_init)
