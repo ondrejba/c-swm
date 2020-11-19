@@ -41,27 +41,59 @@ class BlockPushingCursor(BlockPushing):
 
     def render(self):
 
-        assert self.render_type in ["shapes"]
+        assert self.render_type in ["shapes", "cubes"]
 
-        im = np.zeros((self.width * 10, self.height * 10, 3), dtype=np.float32)
-        for idx, pos in enumerate(self.objects):
-            if idx % 3 == 0:
-                rr, cc = skimage.draw.circle(
-                    pos[0] * 10 + 5, pos[1] * 10 + 5, 5, im.shape)
-                im[rr, cc, :] = self.colors[idx][:3]
-            elif idx % 3 == 1:
-                rr, cc = triangle(
-                    pos[0] * 10, pos[1] * 10, 10, im.shape)
-                im[rr, cc, :] = self.colors[idx][:3]
-            else:
-                rr, cc = square(
-                    pos[0] * 10, pos[1] * 10, 10, im.shape)
-                im[rr, cc, :] = self.colors[idx][:3]
+        if self.render_type == "shapes":
+            # draw shapes
+            im = np.zeros((self.width * 10, self.height * 10, 3), dtype=np.float32)
+            for idx, pos in enumerate(self.objects):
+                if idx % 3 == 0:
+                    rr, cc = skimage.draw.circle(
+                        pos[0] * 10 + 5, pos[1] * 10 + 5, 5, im.shape)
+                    im[rr, cc, :] = self.colors[idx][:3]
+                elif idx % 3 == 1:
+                    rr, cc = triangle(
+                        pos[0] * 10, pos[1] * 10, 10, im.shape)
+                    im[rr, cc, :] = self.colors[idx][:3]
+                else:
+                    rr, cc = square(
+                        pos[0] * 10, pos[1] * 10, 10, im.shape)
+                    im[rr, cc, :] = self.colors[idx][:3]
 
-        # draw cursor
-        rr, cc = square(
-            self.cursor[0] * 10 + 2.5, self.cursor[1] * 10 + 2.5, 5, im.shape)
-        im[rr, cc, :] = self.colors[self.num_objects][:3]
+            # draw cursor
+            rr, cc = square(
+                self.cursor[0] * 10 + 2.5, self.cursor[1] * 10 + 2.5, 5, im.shape)
+            im[rr, cc, :] = self.colors[self.num_objects][:3]
+        else:
+            # draw cubes
+            voxels = np.zeros((self.width, self.width, self.width), dtype=np.bool)
+            colors = np.empty(voxels.shape, dtype=object)
+
+            cols = ['purple', 'green', 'orange', 'blue', 'brown', 'yellow']
+
+            for i, pos in enumerate(self.objects):
+                voxels[pos[0], pos[1], 0] = True
+                colors[pos[0], pos[1], 0] = cols[i]
+
+            voxels[self.cursor[0], self.cursor[1], 1] = True
+            colors[self.cursor[0], self.cursor[1], 1] = cols[-1]
+
+            fig = plt.figure()
+            ax = Axes3D(fig)
+            ax.w_zaxis.set_pane_color((0.5, 0.5, 0.5, 1.0))
+            ax.w_xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+            ax.w_yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+            ax.w_zaxis.line.set_lw(0.)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_zticks([])
+            ax.voxels(voxels, facecolors=colors, edgecolor='k')
+
+            im = fig2rgb_array(fig)
+            plt.close(fig)
+            im = np.array(  # Crop and resize
+                Image.fromarray(im[215:455, 80:570]).resize((50, 50), Image.ANTIALIAS))
+            im = im / 255.
 
         return im.transpose([2, 0, 1])
 

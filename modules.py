@@ -130,7 +130,7 @@ class ContrastiveSWM(nn.Module):
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
 
-    def contrastive_loss(self, obs, action, next_obs, state_ids=None, next_state_ids=None, custom_negs=False,
+    def contrastive_loss(self, obs, action, next_obs, state_ids=None, next_state_ids=None, custom_negs=None,
                          custom_neg_state_ids=None):
 
         objs = self.obj_extractor(obs)

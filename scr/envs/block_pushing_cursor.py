@@ -9,7 +9,7 @@ matplotlib.use("TkAgg")
 
 def main():
 
-    env = BlockPushingCursor(render_type="shapes")
+    env = BlockPushingCursor(render_type="cubes")
     env.reset()
 
     while True:
