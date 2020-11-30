@@ -1,4 +1,5 @@
 from gym.envs.registration import register
+from envs.block_pushing import BlockPushing
 
 register(
     'ShapesTrain-v0',
@@ -12,6 +13,48 @@ register(
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=10,
     kwargs={'render_type': 'shapes'},
+)
+
+register(
+    'ShapesBgRandomTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'background': BlockPushing.BACKGROUND_RANDOM},
+)
+
+register(
+    'ShapesBgRandomEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'background': BlockPushing.BACKGROUND_RANDOM},
+)
+
+register(
+    'ShapesBgSameEpTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'background': BlockPushing.BACKGROUND_RANDOM_SAME_EP},
+)
+
+register(
+    'ShapesBgSameEpEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'background': BlockPushing.BACKGROUND_RANDOM_SAME_EP},
+)
+
+register(
+    'ShapesBgDeterministicTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'background': BlockPushing.BACKGROUND_DETERMINISTIC},
+)
+
+register(
+    'ShapesBgDeterministicEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'background': BlockPushing.BACKGROUND_DETERMINISTIC},
 )
 
 register(

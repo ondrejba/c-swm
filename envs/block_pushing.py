@@ -67,8 +67,14 @@ class BlockPushing(gym.Env):
 
     DIRECTIONS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
 
+    BACKGROUND_WHITE = 0
+    BACKGROUND_RANDOM = 1
+    BACKGROUND_RANDOM_SAME_EP = 2
+    BACKGROUND_DETERMINISTIC = 3
+
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
-                 seed=None, immovable=False, immovable_fixed=False, opposite_direction=False):
+                 seed=None, immovable=False, immovable_fixed=False, opposite_direction=False,
+                 background=BACKGROUND_WHITE):
         self.width = width
         self.height = height
         self.render_type = render_type
@@ -80,6 +86,11 @@ class BlockPushing(gym.Env):
         self.num_actions = 4 * self.num_objects  # Move NESW
 
         self.colors = utils.get_colors(num_colors=max(9, self.num_objects))
+        self.background = background
+        # used only if background != BACKGROUND_WHITE
+        self.background_colors = utils.get_colors(cmap="Set2", num_colors=5)
+        # used only if background in [BACKGROUND_RANDOM_SAME_EP, BACKGROUND_DETERMINISTIC]
+        self.background_index = 0
 
         self.np_random = None
         self.game = None
@@ -107,6 +118,9 @@ class BlockPushing(gym.Env):
         return [seed]
 
     def render(self):
+        # background color is only implemented for some render types
+        assert self.background == self.BACKGROUND_WHITE or self.render_type in ["shapes"]
+
         if self.render_type == 'grid':
             im = np.zeros((3, self.width, self.height))
             for idx, pos in enumerate(self.objects):
@@ -121,6 +135,8 @@ class BlockPushing(gym.Env):
             return im.transpose([2, 0, 1])
         elif self.render_type == 'shapes':
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
+            im = self.set_background_color_shapes_(im)
+
             for idx, pos in enumerate(self.objects):
                 if idx % 3 == 0:
                     rr, cc = skimage.draw.circle(
@@ -139,6 +155,23 @@ class BlockPushing(gym.Env):
             im = render_cubes(self.objects, self.width)
             return im.transpose([2, 0, 1])
 
+    def set_background_color_shapes_(self, im):
+
+        if self.background == self.BACKGROUND_WHITE:
+            return im
+        elif self.background == self.BACKGROUND_RANDOM:
+            idx = np.random.randint(len(self.background_colors))
+            color = self.background_colors[idx]
+        elif self.background in [self.BACKGROUND_RANDOM_SAME_EP, self.BACKGROUND_DETERMINISTIC]:
+            color = self.background_colors[self.background_index]
+        else:
+            assert False
+
+        for i in range(3):
+            im[:, :, i] = color[i]
+
+        return im
+
     def get_state(self):
         im = np.zeros(
             (self.num_objects, self.width, self.height), dtype=np.int32)
@@ -148,10 +181,18 @@ class BlockPushing(gym.Env):
 
     def reset(self):
 
+        self.reset_background_color_()
         self.reset_objects_()
 
         state_obs = (self.get_state(), self.render())
         return state_obs
+
+    def reset_background_color_(self):
+
+        if self.background == self.BACKGROUND_RANDOM_SAME_EP:
+            self.background_index = np.random.randint(len(self.background_colors))
+        elif self.background == self.BACKGROUND_DETERMINISTIC:
+            self.background_index = 0
 
     def reset_objects_(self):
 
@@ -227,6 +268,8 @@ class BlockPushing(gym.Env):
 
     def step(self, action):
 
+        self.step_background_color_()
+
         done = False
         reward = 0
 
@@ -237,6 +280,11 @@ class BlockPushing(gym.Env):
         state_obs = (self.get_state(), self.render())
 
         return state_obs, reward, done, None
+
+    def step_background_color_(self):
+
+        if self.background == self.BACKGROUND_DETERMINISTIC:
+            self.background_index = (self.background_index + 1) % len(self.background_colors)
 
     def get_state_id(self):
 
