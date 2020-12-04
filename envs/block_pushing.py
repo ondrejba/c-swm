@@ -268,6 +268,14 @@ class BlockPushing(gym.Env):
 
     def step(self, action):
 
+        _, reward, done, _ = self.step_no_render_(action)
+
+        state_obs = (self.get_state(), self.render())
+
+        return state_obs, reward, done, None
+
+    def step_no_render(self, action):
+
         self.step_background_color_()
 
         done = False
@@ -277,9 +285,7 @@ class BlockPushing(gym.Env):
         obj = action // 4
         self.translate(obj, self.DIRECTIONS[direction])
 
-        state_obs = (self.get_state(), self.render())
-
-        return state_obs, reward, done, None
+        return None, reward, done, None
 
     def step_background_color_(self):
 
