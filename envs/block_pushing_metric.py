@@ -7,14 +7,17 @@ class BlockPushingMetric(BlockPushing):
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=3,
                  seed=None, immovable=False, immovable_fixed=False, opposite_direction=False,
-                 background=BlockPushing.BACKGROUND_WHITE):
+                 background=BlockPushing.BACKGROUND_WHITE, num_colors=1):
 
         super(BlockPushingMetric, self).__init__(
             width, height, render_type, num_objects, seed, immovable, immovable_fixed, opposite_direction,
             background
         )
 
+        # otherwise the memory will explode
         assert num_objects <= 3
+
+        self.num_colors = num_colors
 
         self.all_states = []
         self.next_states = {i: [] for i in range(self.num_actions)}
@@ -48,7 +51,15 @@ class BlockPushingMetric(BlockPushing):
         num_pos = self.height * self.width
         states = itertools.permutations(list(range(num_pos)), self.num_objects)
         states = [list(state) for state in states]
-        self.all_states = states
+
+        if self.num_colors > 1:
+            self.all_states = []
+            for state in states:
+                for color in range(self.num_colors):
+                    self.all_states.append(state + [color])
+        else:
+            self.all_states = states
+
         self.num_states = len(self.all_states)
 
     def set_rewards_and_next_states_(self):
@@ -60,9 +71,16 @@ class BlockPushingMetric(BlockPushing):
                 self.load_state_new_(state)
                 self.step_no_render(action)
                 next_state = self.get_state_new_()
-                reward = float(state != next_state)
-                self.next_states[action].append(self.all_states.index(next_state))
+                #reward = float(self.all_states.index(next_state) == 0)
+
+                if self.num_colors > 1:
+                    reward = float(state[:-1] != next_state)
+                    next_state = next_state + [(state[-1] + 1) % self.num_colors]
+                else:
+                    reward = float(state != next_state)
+
                 self.rewards[action].append(reward)
+                self.next_states[action].append(self.all_states.index(next_state))
 
     def initialize_metric_(self):
 
@@ -74,7 +92,7 @@ class BlockPushingMetric(BlockPushing):
             self.rewards[key] = np.array(self.rewards[key])
             self.next_states[key] = np.array(self.next_states[key])
 
-        tmp = []
+        best = None
 
         for a in range(self.num_actions):
 
@@ -93,16 +111,21 @@ class BlockPushingMetric(BlockPushing):
             d = d.reshape((self.num_states, self.num_states))
 
             new_metric = 0.1 * np.abs(r1 - r2) + 0.9 * d
-            tmp.append(new_metric)
 
-        new_metric = np.max(tmp, axis=0)
+            if best is None:
+                best = new_metric
+            else:
+                best = np.max([best, new_metric], axis=0)
 
-        diff = np.max(np.abs(self.metric - new_metric))
-        self.metric = new_metric
+        diff = np.max(np.abs(self.metric - best))
+        self.metric = best
         return diff
 
     def load_state_new_(self, state_id):
 
+        # ignore color information
+        state_id = state_id[:self.num_objects]
+        # parse position
         self.objects = [[c // self.width, c % self.width] for c in state_id]
 
     def get_state_new_(self):
