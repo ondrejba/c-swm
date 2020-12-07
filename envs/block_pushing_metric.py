@@ -7,7 +7,7 @@ class BlockPushingMetric(BlockPushing):
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=3,
                  seed=None, immovable=False, immovable_fixed=False, opposite_direction=False,
-                 background=BlockPushing.BACKGROUND_WHITE, num_colors=1):
+                 background=BlockPushing.BACKGROUND_WHITE, num_colors=1, reward_num_goals=10):
 
         super(BlockPushingMetric, self).__init__(
             width, height, render_type, num_objects, seed, immovable, immovable_fixed, opposite_direction,
@@ -18,8 +18,10 @@ class BlockPushingMetric(BlockPushing):
         assert num_objects <= 3
 
         self.num_colors = num_colors
+        self.reward_num_goals = reward_num_goals
 
         self.all_states = []
+        self.all_states_no_colors = []
         self.next_states = {i: [] for i in range(self.num_actions)}
         self.rewards = {i: [] for i in range(self.num_actions)}
         self.num_states = None
@@ -52,6 +54,8 @@ class BlockPushingMetric(BlockPushing):
         states = itertools.permutations(list(range(num_pos)), self.num_objects)
         states = [list(state) for state in states]
 
+        self.all_states_no_colors = states
+
         if self.num_colors > 1:
             self.all_states = []
             for state in states:
@@ -64,6 +68,8 @@ class BlockPushingMetric(BlockPushing):
 
     def set_rewards_and_next_states_(self):
 
+        goals = np.random.choice(list(range(len(self.all_states_no_colors))), size=self.reward_num_goals, replace=False)
+
         for state in self.all_states:
 
             for action in list(range(self.num_actions)):
@@ -71,13 +77,11 @@ class BlockPushingMetric(BlockPushing):
                 self.load_state_new_(state)
                 self.step_no_render(action)
                 next_state = self.get_state_new_()
-                #reward = float(self.all_states.index(next_state) == 0)
+                next_state_index = self.all_states_no_colors.index(next_state)
+                reward = [float(next_state_index == goal) for goal in goals]
 
                 if self.num_colors > 1:
-                    reward = float(state[:-1] != next_state)
                     next_state = next_state + [(state[-1] + 1) % self.num_colors]
-                else:
-                    reward = float(state != next_state)
 
                 self.rewards[action].append(reward)
                 self.next_states[action].append(self.all_states.index(next_state))
@@ -100,6 +104,11 @@ class BlockPushingMetric(BlockPushing):
             r1 = r[:, None].repeat(self.num_states, axis=1)
             r2 = r[None, :].repeat(self.num_states, axis=0)
 
+            if len(r1.shape) == 3:
+                r_dist = np.max(np.abs(r1 - r2), axis=2)
+            else:
+                r_dist = np.abs(r1 - r2)
+
             sp = self.next_states[a]
             sp1 = sp[:, None].repeat(self.num_states, axis=1)
             sp2 = sp[None, :].repeat(self.num_states, axis=0)
@@ -110,7 +119,7 @@ class BlockPushingMetric(BlockPushing):
             d = self.metric[sp1, sp2]
             d = d.reshape((self.num_states, self.num_states))
 
-            new_metric = 0.1 * np.abs(r1 - r2) + 0.9 * d
+            new_metric = 0.1 * r_dist + 0.9 * d
 
             if best is None:
                 best = new_metric
