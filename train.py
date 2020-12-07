@@ -54,6 +54,7 @@ parser.add_argument('--bisim', action='store_true', default=False)
 parser.add_argument('--gamma', type=float, default=1.0)
 parser.add_argument('--reject-negative', default=False, action='store_true')
 parser.add_argument('--custom-neg', default=False, action='store_true')
+parser.add_argument('--bisim-metric-path')
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -128,6 +129,11 @@ train_loader = data.DataLoader(
 obs = train_loader.__iter__().next()[0]
 input_shape = obs[0].size()
 
+# maybe load bisim metric and turn it into torch tensor on the selected device
+bisim_metric = None
+if args.bisim_metric_path is not None:
+    bisim_metric = torch.tensor(np.load(args.bisim_metric_path), dtype=torch.float32, device=device)
+
 model = modules.ContrastiveSWM(
     embedding_dim=args.embedding_dim,
     hidden_dim=args.hidden_dim,
@@ -147,6 +153,7 @@ model = modules.ContrastiveSWM(
     bilinear_loss=args.bilinear_energy,
     gamma=args.gamma,
     reject_negative=args.reject_negative,
+    bisim_metric=bisim_metric,
     encoder=args.encoder).to(device)
 
 model.apply(utils.weights_init)

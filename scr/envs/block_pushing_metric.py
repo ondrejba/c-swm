@@ -5,7 +5,7 @@ from envs.block_pushing_metric import BlockPushingMetric
 import utils
 import matplotlib
 
-matplotlib.use("TkAgg")
+#matplotlib.use("TkAgg")
 
 
 def main(args):

@@ -143,7 +143,12 @@ with torch.no_grad():
 
     mask_mistakes = indices[:, 0] != 0
     closest_next_ids = next_ids_cat[indices[:, 0] - 1]
-    equal_mask = np.all(closest_next_ids == next_ids_cat, axis=1)
+
+    if len(next_ids_cat.shape) == 2:
+        equal_mask = np.all(closest_next_ids == next_ids_cat, axis=1)
+    else:
+        equal_mask = closest_next_ids == next_ids_cat
+
     indices[:, 0][np.logical_and(equal_mask, mask_mistakes)] = 0
 
     indices = torch.from_numpy(indices).long()

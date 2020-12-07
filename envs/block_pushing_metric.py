@@ -10,8 +10,8 @@ class BlockPushingMetric(BlockPushing):
                  background=BlockPushing.BACKGROUND_WHITE, num_colors=1, reward_num_goals=10):
 
         super(BlockPushingMetric, self).__init__(
-            width, height, render_type, num_objects, seed, immovable, immovable_fixed, opposite_direction,
-            background
+            width, height, render_type, num_objects, seed, immovable, immovable_fixed,
+            opposite_direction=opposite_direction, background=background, num_colors=num_colors
         )
 
         # otherwise the memory will explode
@@ -27,10 +27,11 @@ class BlockPushingMetric(BlockPushing):
         self.num_states = None
         self.metric = None
 
-    def compute_metric(self, tolerance=0.001, max_steps=1000):
-
         self.enumerate_states_()
         self.set_rewards_and_next_states_()
+
+    def compute_metric(self, tolerance=0.001, max_steps=1000):
+
         self.initialize_metric_()
 
         for i in range(max_steps):
@@ -86,28 +87,36 @@ class BlockPushingMetric(BlockPushing):
                 self.rewards[action].append(reward)
                 self.next_states[action].append(self.all_states.index(next_state))
 
+        for key in self.rewards.keys():
+            self.rewards[key] = np.array(self.rewards[key])
+            self.next_states[key] = np.array(self.next_states[key])
+
     def initialize_metric_(self):
 
         self.metric = np.zeros((self.num_states, self.num_states), dtype=np.float32)
 
     def iterate_metric_(self):
 
-        for key in self.rewards.keys():
-            self.rewards[key] = np.array(self.rewards[key])
-            self.next_states[key] = np.array(self.next_states[key])
-
         best = None
 
         for a in range(self.num_actions):
 
-            r = self.rewards[a]
-            r1 = r[:, None].repeat(self.num_states, axis=1)
-            r2 = r[None, :].repeat(self.num_states, axis=0)
+            r_dist = np.zeros((self.num_states, self.num_states), dtype=np.float32)
 
-            if len(r1.shape) == 3:
-                r_dist = np.max(np.abs(r1 - r2), axis=2)
-            else:
-                r_dist = np.abs(r1 - r2)
+            # if there are multiple reward functions we iterate over them to save memory
+            for i in range(self.reward_num_goals):
+
+                r = self.rewards[a][:, i]
+                r1 = r[:, None].repeat(self.num_states, axis=1)
+                r2 = r[None, :].repeat(self.num_states, axis=0)
+
+                tmp_r_dist = np.abs(r1 - r2)
+                r_dist = np.max([r_dist, tmp_r_dist], axis=0)
+
+            # python dealloc is not doing its job somewhere
+            del r1
+            del r2
+            del tmp_r_dist
 
             sp = self.next_states[a]
             sp1 = sp[:, None].repeat(self.num_states, axis=1)
@@ -118,6 +127,9 @@ class BlockPushingMetric(BlockPushing):
 
             d = self.metric[sp1, sp2]
             d = d.reshape((self.num_states, self.num_states))
+
+            del sp1
+            del sp2
 
             new_metric = 0.1 * r_dist + 0.9 * d
 
@@ -140,3 +152,10 @@ class BlockPushingMetric(BlockPushing):
     def get_state_new_(self):
 
         return [x * self.width + y for x, y in self.objects]
+
+    def get_state_id(self):
+
+        if self.num_colors > 1:
+            return self.all_states.index(self.get_state_new_() + [self.background_index])
+        else:
+            return self.all_states.index(self.get_state_new_())

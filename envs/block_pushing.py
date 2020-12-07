@@ -74,7 +74,7 @@ class BlockPushing(gym.Env):
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
                  seed=None, immovable=False, immovable_fixed=False, opposite_direction=False,
-                 background=BACKGROUND_WHITE):
+                 background=BACKGROUND_WHITE, num_colors=5):
         self.width = width
         self.height = height
         self.render_type = render_type
@@ -84,11 +84,12 @@ class BlockPushing(gym.Env):
 
         self.num_objects = num_objects
         self.num_actions = 4 * self.num_objects  # Move NESW
+        self.num_colors = num_colors
 
         self.colors = utils.get_colors(num_colors=max(9, self.num_objects))
         self.background = background
         # used only if background != BACKGROUND_WHITE
-        self.background_colors = utils.get_colors(cmap="Set2", num_colors=5)
+        self.background_colors = utils.get_colors(cmap="Set2", num_colors=num_colors)
         # used only if background in [BACKGROUND_RANDOM_SAME_EP, BACKGROUND_DETERMINISTIC]
         self.background_index = 0
 
@@ -268,7 +269,7 @@ class BlockPushing(gym.Env):
 
     def step(self, action):
 
-        _, reward, done, _ = self.step_no_render_(action)
+        _, reward, done, _ = self.step_no_render(action)
 
         state_obs = (self.get_state(), self.render())
 
