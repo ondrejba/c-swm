@@ -23,7 +23,7 @@ class ContrastiveSWM(nn.Module):
                  ignore_action=False, copy_action=False, split_mlp=False,
                  same_ep_neg=False, only_same_ep_neg=False, immovable_bit=False,
                  split_gnn=False, no_loss_first_two=False, bilinear_loss=False,
-                 gamma=1.0, reject_negative=False, bisim_metric=None):
+                 gamma=1.0, reject_negative=False, bisim_metric=None, bisim_eps=None):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -43,6 +43,7 @@ class ContrastiveSWM(nn.Module):
         self.gamma = gamma
         self.reject_negative = reject_negative
         self.bisim_metric = bisim_metric
+        self.bisim_eps = bisim_eps
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -182,6 +183,11 @@ class ContrastiveSWM(nn.Module):
             elif self.bisim_metric is not None:
                 neg_state_ids = state_ids[perm]
                 dists = self.bisim_metric[state_ids, neg_state_ids]
+
+                if self.bisim_eps is not None:
+                    dists[dists <= self.bisim_eps] = 0.0
+                    dists[dists > self.bisim_eps] = 1.0
+
                 self.neg_loss = self.neg_loss * dists
                 self.neg_loss = self.neg_loss.sum() / dists.sum()
             else:
