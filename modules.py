@@ -23,7 +23,8 @@ class ContrastiveSWM(nn.Module):
                  ignore_action=False, copy_action=False, split_mlp=False,
                  same_ep_neg=False, only_same_ep_neg=False, immovable_bit=False,
                  split_gnn=False, no_loss_first_two=False, bilinear_loss=False,
-                 gamma=1.0, reject_negative=False, bisim_metric=None, bisim_eps=None):
+                 gamma=1.0, reject_negative=False, bisim_metric=None, bisim_eps=None,
+                 bisim_model=None):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -44,6 +45,7 @@ class ContrastiveSWM(nn.Module):
         self.reject_negative = reject_negative
         self.bisim_metric = bisim_metric
         self.bisim_eps = bisim_eps
+        self.bisim_model = bisim_model
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -154,6 +156,7 @@ class ContrastiveSWM(nn.Module):
         if custom_negs is not None:
 
             assert self.bisim_metric is None # not implemented
+            assert self.bisim_model is None # not implemented
 
             custom_neg_objs = self.obj_extractor(custom_negs)
             custom_neg_state = self.obj_encoder(custom_neg_objs)
@@ -180,9 +183,14 @@ class ContrastiveSWM(nn.Module):
                 neg_mask = 1.0 - torch.all(state_ids == neg_state_ids, dim=1).float()
                 self.neg_loss = self.neg_loss * neg_mask
                 self.neg_loss = self.neg_loss.sum() / neg_mask.sum()
-            elif self.bisim_metric is not None:
-                neg_state_ids = state_ids[perm]
-                dists = self.bisim_metric[state_ids, neg_state_ids]
+            elif self.bisim_metric is not None or self.bisim_model is not None:
+
+                if self.bisim_metric is not None:
+                    neg_state_ids = state_ids[perm]
+                    dists = self.bisim_metric[state_ids, neg_state_ids]
+                else:
+                    stack = torch.cat([obs, next_obs], dim=1)
+                    dists = self.bisim_model(stack)[:, 0]
 
                 if self.bisim_eps is not None:
                     dists[dists <= self.bisim_eps] = 0.0

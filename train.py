@@ -8,6 +8,7 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
+from train_sim import make_pairwise_encoder
 
 from torch.utils import data
 import torch.nn.functional as F
@@ -56,6 +57,7 @@ parser.add_argument('--reject-negative', default=False, action='store_true')
 parser.add_argument('--custom-neg', default=False, action='store_true')
 parser.add_argument('--bisim-metric-path')
 parser.add_argument('--bisim-eps', type=float)
+parser.add_argument('--bisim-model-path')
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -135,6 +137,12 @@ bisim_metric = None
 if args.bisim_metric_path is not None:
     bisim_metric = torch.tensor(np.load(args.bisim_metric_path), dtype=torch.float32, device=device)
 
+# maybe load bisim model
+bisim_model = None
+if args.bisim_model_path is not None:
+    bisim_model = make_pairwise_encoder()
+    bisim_model.load_state_dict(torch.load(args.bisim_model_path))
+
 model = modules.ContrastiveSWM(
     embedding_dim=args.embedding_dim,
     hidden_dim=args.hidden_dim,
@@ -156,6 +164,7 @@ model = modules.ContrastiveSWM(
     reject_negative=args.reject_negative,
     bisim_metric=bisim_metric,
     bisim_eps=args.bisim_eps,
+    bisim_model=bisim_model,
     encoder=args.encoder).to(device)
 
 model.apply(utils.weights_init)

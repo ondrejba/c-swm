@@ -7,7 +7,8 @@ class BlockPushingMetric(BlockPushing):
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=3,
                  seed=None, immovable=False, immovable_fixed=False, opposite_direction=False,
-                 background=BlockPushing.BACKGROUND_WHITE, num_colors=1, reward_num_goals=10):
+                 background=BlockPushing.BACKGROUND_WHITE, num_colors=1, reward_num_goals=10,
+                 all_goals=False):
 
         super(BlockPushingMetric, self).__init__(
             width, height, render_type, num_objects, seed, immovable, immovable_fixed,
@@ -19,9 +20,9 @@ class BlockPushingMetric(BlockPushing):
 
         self.num_colors = num_colors
         self.reward_num_goals = reward_num_goals
+        self.all_goals = all_goals
 
         self.all_states = []
-        self.all_states_no_colors = []
         self.next_states = {i: [] for i in range(self.num_actions)}
         self.rewards = {i: [] for i in range(self.num_actions)}
         self.num_states = None
@@ -55,21 +56,12 @@ class BlockPushingMetric(BlockPushing):
         states = itertools.permutations(list(range(num_pos)), self.num_objects)
         states = [list(state) for state in states]
 
-        self.all_states_no_colors = states
-
-        if self.num_colors > 1:
-            self.all_states = []
-            for state in states:
-                for color in range(self.num_colors):
-                    self.all_states.append(state + [color])
-        else:
-            self.all_states = states
-
+        self.all_states = states
         self.num_states = len(self.all_states)
 
     def set_rewards_and_next_states_(self):
 
-        goals = np.random.choice(list(range(len(self.all_states_no_colors))), size=self.reward_num_goals, replace=False)
+        goals = np.random.choice(list(range(len(self.all_states))), size=self.reward_num_goals, replace=False)
 
         for state in self.all_states:
 
@@ -78,11 +70,8 @@ class BlockPushingMetric(BlockPushing):
                 self.load_state_new_(state)
                 self.step_no_render(action)
                 next_state = self.get_state_new_()
-                next_state_index = self.all_states_no_colors.index(next_state)
+                next_state_index = self.all_states.index(next_state)
                 reward = [float(next_state_index == goal) for goal in goals]
-
-                if self.num_colors > 1:
-                    next_state = next_state + [(state[-1] + 1) % self.num_colors]
 
                 self.rewards[action].append(reward)
                 self.next_states[action].append(self.all_states.index(next_state))
@@ -103,20 +92,25 @@ class BlockPushingMetric(BlockPushing):
 
             r_dist = np.zeros((self.num_states, self.num_states), dtype=np.float32)
 
-            # if there are multiple reward functions we iterate over them to save memory
-            for i in range(self.reward_num_goals):
+            if self.all_goals:
+                # if every state is a goal than the reward distance is one between non-identical states
+                r_dist = np.ones_like(r_dist)
+                r_dist[list(range(self.num_states)), list(range(self.num_states))] = 0.0
+            else:
+                # if there are multiple reward functions we iterate over them to save memory
+                for i in range(self.reward_num_goals):
 
-                r = self.rewards[a][:, i]
-                r1 = r[:, None].repeat(self.num_states, axis=1)
-                r2 = r[None, :].repeat(self.num_states, axis=0)
+                    r = self.rewards[a][:, i]
+                    r1 = r[:, None].repeat(self.num_states, axis=1)
+                    r2 = r[None, :].repeat(self.num_states, axis=0)
 
-                tmp_r_dist = np.abs(r1 - r2)
-                r_dist = np.max([r_dist, tmp_r_dist], axis=0)
+                    tmp_r_dist = np.abs(r1 - r2)
+                    r_dist = np.max([r_dist, tmp_r_dist], axis=0)
 
-            # python dealloc is not doing its job somewhere
-            del r1
-            del r2
-            del tmp_r_dist
+                # python dealloc is not doing its job somewhere
+                del r1
+                del r2
+                del tmp_r_dist
 
             sp = self.next_states[a]
             sp1 = sp[:, None].repeat(self.num_states, axis=1)
@@ -155,7 +149,4 @@ class BlockPushingMetric(BlockPushing):
 
     def get_state_id(self):
 
-        if self.num_colors > 1:
-            return self.all_states.index(self.get_state_new_() + [self.background_index])
-        else:
-            return self.all_states.index(self.get_state_new_())
+        return self.all_states.index(self.get_state_new_())

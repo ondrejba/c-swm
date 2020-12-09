@@ -158,6 +158,36 @@ register(
 )
 
 register(
+    'ShapesMetricO2C1Train-v0',
+    entry_point='envs.block_pushing_metric:BlockPushingMetric',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 2, 'num_colors': 1},
+)
+
+register(
+    'ShapesMetricO2C1Eval-v0',
+    entry_point='envs.block_pushing_metric:BlockPushingMetric',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'num_objects': 2, 'num_colors': 1},
+)
+
+register(
+    'ShapesMetricO2C5Train-v0',
+    entry_point='envs.block_pushing_metric:BlockPushingMetric',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 2, 'num_colors': 5,
+            'background': BlockPushing.BACKGROUND_DETERMINISTIC},
+)
+
+register(
+    'ShapesMetricO2C5Eval-v0',
+    entry_point='envs.block_pushing_metric:BlockPushingMetric',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'num_objects': 2, 'num_colors': 5,
+            'background': BlockPushing.BACKGROUND_DETERMINISTIC},
+)
+
+register(
     'CubesTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
