@@ -50,14 +50,14 @@ parser.add_argument('--immovable-bit', action='store_true', default=False)
 parser.add_argument('--same-ep-neg', action='store_true', default=False)
 parser.add_argument('--only-same-ep-neg', action='store_true', default=False)
 parser.add_argument('--no-loss-first-two', action='store_true', default=False)
-parser.add_argument('--bilinear-energy', action='store_true', default=False)
 parser.add_argument('--bisim', action='store_true', default=False)
 parser.add_argument('--gamma', type=float, default=1.0)
-parser.add_argument('--reject-negative', default=False, action='store_true')
 parser.add_argument('--custom-neg', default=False, action='store_true')
 parser.add_argument('--bisim-metric-path')
 parser.add_argument('--bisim-eps', type=float)
 parser.add_argument('--bisim-model-path')
+parser.add_argument('--next-state-neg', default=False, action="store_true")
+parser.add_argument('--nl-type', default=0, type=int)
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -159,12 +159,12 @@ model = modules.ContrastiveSWM(
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
     no_loss_first_two=args.no_loss_first_two,
-    bilinear_loss=args.bilinear_energy,
     gamma=args.gamma,
-    reject_negative=args.reject_negative,
     bisim_metric=bisim_metric,
     bisim_eps=args.bisim_eps,
     bisim_model=bisim_model,
+    next_state_neg=args.next_state_neg,
+    nl_type=args.nl_type,
     encoder=args.encoder).to(device)
 
 model.apply(utils.weights_init)
