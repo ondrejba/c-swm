@@ -47,6 +47,7 @@ parser.add_argument('--split-gnn', action='store_true', default=False)
 parser.add_argument('--immovable-bit', action='store_true', default=False)
 parser.add_argument('--same-ep-neg', action='store_true', default=False)
 parser.add_argument('--only-same-ep-neg', action='store_true', default=False)
+parser.add_argument('--rot', action='store_true', default=False)
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -125,7 +126,8 @@ model = modules.ContrastiveSWM(
     only_same_ep_neg=args.only_same_ep_neg,
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
-    encoder=args.encoder).to(device)
+    encoder=args.encoder,
+    rot=args.rot).to(device)
 
 model.apply(utils.weights_init)
 
@@ -170,7 +172,6 @@ for epoch in range(1, args.epochs + 1):
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
         optimizer.zero_grad()
-
         if args.decoder:
             optimizer_dec.zero_grad()
             obs, action, next_obs = data_batch

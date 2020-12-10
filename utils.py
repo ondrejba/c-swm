@@ -118,10 +118,13 @@ def to_float(np_array):
 
 def unsorted_segment_sum(tensor, segment_ids, num_segments):
     """Custom PyTorch op to replicate TensorFlow's `unsorted_segment_sum`."""
-    result_shape = (num_segments, tensor.size(1))
-    result = tensor.new_full(result_shape, 0)  # Init empty result tensor.
+    orig_shape = tensor.shape
+    tensor = tensor.reshape(orig_shape[0],-1)
+    flat_result_shape = (num_segments, tensor.size(1))
+    result = tensor.new_full(flat_result_shape, 0)  # Init empty result tensor.
     segment_ids = segment_ids.unsqueeze(-1).expand(-1, tensor.size(1))
     result.scatter_add_(0, segment_ids, tensor)
+    result = result.reshape([num_segments]+list(orig_shape[1:]))
     return result
 
 

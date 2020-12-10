@@ -7,6 +7,7 @@ import torch
 from torch import nn
 
 
+
 class ContrastiveSWM(nn.Module):
     """Main module for a Contrastively-trained Structured World Model (C-SWM).
 
@@ -18,11 +19,23 @@ class ContrastiveSWM(nn.Module):
         num_objects: Number of object slots.
         same_ep_neg: Sample negative samples from the same episode.
     """
-    def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
-                 num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False, split_mlp=False,
-                 same_ep_neg=False, only_same_ep_neg=False, immovable_bit=False,
-                 split_gnn=False):
+    def __init__(self,
+                 embedding_dim,
+                 input_dims,
+                 hidden_dim,
+                 action_dim,
+                 num_objects,
+                 hinge=1.,
+                 sigma=0.5,
+                 encoder='large',
+                 ignore_action=False,
+                 copy_action=False,
+                 split_mlp=False,
+                 same_ep_neg=False,
+                 only_same_ep_neg=False,
+                 immovable_bit=False,
+                 split_gnn=False,
+                 rot=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -37,6 +50,7 @@ class ContrastiveSWM(nn.Module):
         self.same_ep_neg = same_ep_neg
         self.only_same_ep_neg = only_same_ep_neg
         self.split_gnn = split_gnn
+        self.rot = rot
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -45,46 +59,48 @@ class ContrastiveSWM(nn.Module):
         width_height = input_dims[1:]
 
         if encoder == 'small':
-            self.obj_extractor = EncoderCNNSmall(
-                input_dim=num_channels,
-                hidden_dim=hidden_dim // 16,
-                num_objects=num_objects)
+            self.obj_extractor = EncoderCNNSmall(input_dim=num_channels,
+                                                 hidden_dim=hidden_dim // 16,
+                                                 num_objects=num_objects)
             # CNN image size changes
             width_height = np.array(width_height)
             width_height = width_height // 10
         elif encoder == 'medium':
-            self.obj_extractor = EncoderCNNMedium(
-                input_dim=num_channels,
-                hidden_dim=hidden_dim // 16,
-                num_objects=num_objects)
+            self.obj_extractor = EncoderCNNMedium(input_dim=num_channels,
+                                                  hidden_dim=hidden_dim // 16,
+                                                  num_objects=num_objects)
             # CNN image size changes
             width_height = np.array(width_height)
             width_height = width_height // 5
         elif encoder == 'large':
-            self.obj_extractor = EncoderCNNLarge(
-                input_dim=num_channels,
-                hidden_dim=hidden_dim // 16,
-                num_objects=num_objects)
+            self.obj_extractor = EncoderCNNLarge(input_dim=num_channels,
+                                                 hidden_dim=hidden_dim // 16,
+                                                 num_objects=num_objects)
 
         mlp_class = EncoderMLP
         if self.split_mlp:
-            mlp_class = SplitEncoderMLP
+            mlp_class = SplitEncoderMLP    #To do, make switch  
+        if self.rot:
+            mlp_class = RotEncoderMLP
 
-        self.obj_encoder = mlp_class(
-            input_dim=np.prod(width_height),
-            hidden_dim=hidden_dim,
-            output_dim=embedding_dim,
-            num_objects=num_objects)
+        encoder_input_dim = np.prod(width_height)
+        if self.rot:
+            encoder_input_dim = 7 #Hard-coded for now
 
-        self.transition_model = TransitionGNN(
-            input_dim=embedding_dim,
-            hidden_dim=hidden_dim,
-            action_dim=action_dim,
-            num_objects=num_objects,
-            ignore_action=ignore_action,
-            copy_action=copy_action,
-            immovable_bit=immovable_bit,
-            split_gnn=split_gnn)
+        self.obj_encoder = mlp_class(input_dim=encoder_input_dim,
+                                     hidden_dim=hidden_dim,
+                                     output_dim=embedding_dim,
+                                     num_objects=num_objects)
+
+        self.transition_model = TransitionGNN(input_dim=embedding_dim,
+                                              hidden_dim=hidden_dim,
+                                              action_dim=action_dim,
+                                              num_objects=num_objects,
+                                              ignore_action=ignore_action,
+                                              copy_action=copy_action,
+                                              immovable_bit=immovable_bit,
+                                              split_gnn=split_gnn,
+                                              rot=rot)
 
         self.width = width_height[0]
         self.height = width_height[1]
@@ -120,11 +136,11 @@ class ContrastiveSWM(nn.Module):
 
         self.pos_loss = self.energy(state, action, next_state)
         zeros = torch.zeros_like(self.pos_loss)
-        
+
         self.pos_loss = self.pos_loss.mean()
         self.neg_loss = torch.max(
-            zeros, self.hinge - self.energy(
-                state, action, neg_state, no_trans=True)).mean()
+            zeros, self.hinge -
+            self.energy(state, action, neg_state, no_trans=True)).mean()
 
         if self.same_ep_neg:
             ep_size = state.size(1)
@@ -135,8 +151,13 @@ class ContrastiveSWM(nn.Module):
             #neg_state[:, :] = neg_state[:, perm]
 
             # different perm for each batch
-            perm = np.stack([np.random.permutation(np.arange(ep_size)) for _ in range(batch_size)], axis=0)
-            indices = np.arange(batch_size)[:, np.newaxis].repeat(ep_size, axis=1)
+            perm = np.stack([
+                np.random.permutation(np.arange(ep_size))
+                for _ in range(batch_size)
+            ],
+                            axis=0)
+            indices = np.arange(batch_size)[:, np.newaxis].repeat(ep_size,
+                                                                  axis=1)
             neg_state[:, :] = neg_state[indices, perm]
 
             if self.only_same_ep_neg:
@@ -148,7 +169,7 @@ class ContrastiveSWM(nn.Module):
                 # average negative loss over in-episode and out-of-episode samples
                 self.neg_loss += torch.max(
                     zeros, self.hinge - self.energy(
-                    state, action, neg_state, no_trans=True)).mean()
+                        state, action, neg_state, no_trans=True)).mean()
                 self.neg_loss /= 2
 
         loss = self.pos_loss + self.neg_loss
@@ -156,14 +177,97 @@ class ContrastiveSWM(nn.Module):
         return loss
 
     def forward(self, obs):
-        return self.obj_encoder(self.obj_extractor(obs))
+        obj = self.obj_extractor(obs)
+        return self.obj_encoder(obj)
+
+
+class C4Conv(nn.Module):
+    """C_4 Convolution"""
+    def __init__(self, size_in, size_out):
+        super().__init__()
+        self.size_in, self.size_out = size_in, size_out
+        weights = torch.rand(4, size_out, size_in)
+        weights -= 0.5
+        k = 1 / torch.sqrt(torch.tensor(size_in, dtype=torch.float))
+        weights *= k
+        self.weights = torch.nn.parameter.Parameter(weights)
+        bias = torch.rand(size_out)
+        bias -= 0.5
+        bias *= k
+        self.bias = torch.nn.parameter.Parameter(bias)
+        mat = torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0)
+        self.register_buffer('mat', mat)
+    
+    def updateKernel(self):
+        self.mat=torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0)
+
+    def forward(self, x):
+        #TODO: really should only call after update
+        self.updateKernel()
+        w_times_x= torch.einsum('ghij,...hj->...gi',self.mat, x)
+        return torch.add(w_times_x, self.bias)  # w times x + b
+
+
+class RotEncoderMLP(nn.Module):
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 hidden_dim,
+                 num_objects,
+                 act_fn='relu'):
+
+        super().__init__()
+        self.num_objects = num_objects
+        self.input_dim = input_dim
+
+        self.fc1 = C4Conv(self.input_dim, hidden_dim)
+        self.fc2 = C4Conv(hidden_dim, hidden_dim)
+        self.fc3 = C4Conv(hidden_dim, output_dim)
+
+        self.ln = nn.LayerNorm(hidden_dim)
+
+        self.act1 = utils.get_act_fn(act_fn)
+        self.act2 = utils.get_act_fn(act_fn)
+
+    def forward(self, ins):
+        """ 
+        input: 2D Shapes (batch, num_objects, 5, 5)
+
+        """
+        h_flat = self.orbit_stack(ins)
+        h = self.act1(self.fc1(h_flat))
+        h = self.act2(self.ln(self.fc2(h)))
+        return self.fc3(h)
+
+    def rot90(self, x, exp = 1):
+        if (exp == 0):
+            return x
+        else:
+            return self.rot90(x.flip(3).permute(0,1,3,2), exp - 1)
+
+    def orbit_stack(self, x):
+        """
+        Input: (batch, num_objects, H, H)
+        H should be odd and input is square image
+        """
+        H = x.size(-1)
+        c = (H - 1) // 2
+        n_orbits = 1 + c + (c)**2
+        
+        out = torch.zeros((x.size(0),x.size(1),n_orbits,4),device=self.fc1.weights.device)
+
+        out[:,:,0,:] = ((x[:,:,c,c]).unsqueeze(2)).expand(-1,-1,4)
+        for i in range(4):
+            out[:,:,1:,i] = self.rot90(x,i)[:,:,:c,:c+1].reshape(x.size(0),x.size(1),-1)
+        
+        return out.permute(0,1,3,2)
 
 
 class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
     def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
                  ignore_action=False, copy_action=False, act_fn='relu',
-                 immovable_bit=False, split_gnn=False):
+                 immovable_bit=False, split_gnn=False, rot=False):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -173,6 +277,7 @@ class TransitionGNN(torch.nn.Module):
         self.copy_action = copy_action
         self.immovable_bit = immovable_bit
         self.split_gnn = split_gnn
+        self.rot = rot
 
         if self.immovable_bit:
             self.input_dim += 1
@@ -183,22 +288,22 @@ class TransitionGNN(torch.nn.Module):
             self.action_dim = action_dim
 
         self.edge_mlp = nn.Sequential(
-            nn.Linear(self.input_dim*2, hidden_dim),
+            C4Conv(self.input_dim*2, hidden_dim),
             utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, hidden_dim),
+            C4Conv(hidden_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, hidden_dim))
-
-        node_input_dim = hidden_dim + self.input_dim + self.action_dim
+            C4Conv(hidden_dim, hidden_dim))
+        
+        node_input_dim = hidden_dim + self.input_dim + 1 #action_dim = 1 vs. 4
 
         self.node_mlp = nn.Sequential(
-            nn.Linear(node_input_dim, hidden_dim),
+            C4Conv(node_input_dim, hidden_dim),
             utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, hidden_dim),
+            C4Conv(hidden_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, self.input_dim))
+            C4Conv(hidden_dim, self.input_dim))
 
         if self.split_gnn:
             self.edge_mlp1 = self.edge_mlp
@@ -216,7 +321,7 @@ class TransitionGNN(torch.nn.Module):
 
     def _edge_model(self, source, target, edge_attr, source_indices=None, target_indices=None):
         del edge_attr  # Unused.
-        out = torch.cat([source, target], dim=1)
+        out = torch.cat([source, target], dim=2)
 
         if self.split_gnn:
             ret = torch.zeros((out.size(0), self.hidden_dim), dtype=out.dtype, device=out.device)
@@ -229,6 +334,7 @@ class TransitionGNN(torch.nn.Module):
             ret[mask1] = self.edge_mlp1(out[mask1])
             ret[mask2] = self.edge_mlp2(out[mask2])
             ret[mask3] = self.edge_mlp3(out[mask3])
+            return ret  #Right?
         else:
             return self.edge_mlp(out)
 
@@ -237,7 +343,7 @@ class TransitionGNN(torch.nn.Module):
             row, col = edge_index
             agg = utils.unsorted_segment_sum(
                 edge_attr, row, num_segments=node_attr.size(0))
-            out = torch.cat([node_attr, agg], dim=1)
+            out = torch.cat([node_attr, agg], dim=2)
         else:
             out = node_attr
 
@@ -298,7 +404,10 @@ class TransitionGNN(torch.nn.Module):
 
         # states: [batch_size (B), num_objects, embedding_dim]
         # node_attr: Flatten states tensor to [B * num_objects, embedding_dim]
-        node_attr = states.view(-1, self.input_dim)
+        #print("states:",states.shape)
+        #node_attr = states.view(-1, self.input_dim)
+        node_attr = states.reshape(-1, 4, self.input_dim)
+        #print("node_shape:",node_attr.shape)
 
         edge_attr = None
         edge_index = None
@@ -325,13 +434,13 @@ class TransitionGNN(torch.nn.Module):
                 action_vec = action_vec.view(-1, self.action_dim)
 
             # Attach action to each state
-            node_attr = torch.cat([node_attr, action_vec], dim=-1)
+            node_attr = torch.cat([node_attr, torch.flip(action_vec.unsqueeze(2),dims=[1])], dim=-1)
 
         node_attr = self._node_model(
             node_attr, edge_index, edge_attr)
 
         # [batch_size, num_nodes, hidden_dim]
-        node_attr = node_attr.view(batch_size, num_nodes, -1)
+        node_attr = node_attr.view(batch_size, num_nodes, 4, -1)
 
         if self.immovable_bit:
             # object embeddings have an additional bit for movable/immovable objects

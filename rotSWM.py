@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from modules import EncoderCNNSmall, EncoderCNNMedium, EncoderCNNLarge, TransitionGNN, DecoderMLP, DecoderCNNSmall, DecoderCNNMedium, DecoderCNNMedium
+from modules import EncoderCNNSmall, EncoderCNNMedium, EncoderCNNLarge, DecoderMLP, DecoderCNNSmall, DecoderCNNMedium, DecoderCNNMedium
 
 
 class RotContrastiveSWM(nn.Module):
@@ -35,7 +35,8 @@ class RotContrastiveSWM(nn.Module):
                  same_ep_neg=False,
                  only_same_ep_neg=False,
                  immovable_bit=False,
-                 split_gnn=False):
+                 split_gnn=False,
+                 rot=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -50,6 +51,7 @@ class RotContrastiveSWM(nn.Module):
         self.same_ep_neg = same_ep_neg
         self.only_same_ep_neg = only_same_ep_neg
         self.split_gnn = split_gnn
+        self.rot = rot
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -78,7 +80,9 @@ class RotContrastiveSWM(nn.Module):
 
         mlp_class = EncoderMLP
         if self.split_mlp:
-            mlp_class = SplitEncoderMLP
+            mlp_class = SplitEncoderMLP    #To do, make switch  
+        if self.rot:
+            mlp_class = RotEncoderMLP
 
         self.obj_encoder = mlp_class(input_dim=np.prod(width_height),
                                      hidden_dim=hidden_dim,
@@ -92,7 +96,8 @@ class RotContrastiveSWM(nn.Module):
                                               ignore_action=ignore_action,
                                               copy_action=copy_action,
                                               immovable_bit=immovable_bit,
-                                              split_gnn=split_gnn)
+                                              split_gnn=split_gnn,
+                                              rot=rot)
 
         self.width = width_height[0]
         self.height = width_height[1]
@@ -226,3 +231,184 @@ class RotEncoderMLP(nn.Module):
         
         return out
 
+class TransitionGNN(torch.nn.Module):
+    """GNN-based transition function."""
+    def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
+                 ignore_action=False, copy_action=False, act_fn='relu',
+                 immovable_bit=False, split_gnn=False, rot=False):
+        super(TransitionGNN, self).__init__()
+
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_objects = num_objects
+        self.ignore_action = ignore_action
+        self.copy_action = copy_action
+        self.immovable_bit = immovable_bit
+        self.split_gnn = split_gnn
+        self.rot = rot
+
+        if self.immovable_bit:
+            self.input_dim += 1
+
+        if self.ignore_action:
+            self.action_dim = 0
+        else:
+            self.action_dim = action_dim
+
+        self.edge_mlp = nn.Sequential(
+            nn.Linear(self.input_dim*2, hidden_dim),
+            utils.get_act_fn(act_fn),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            utils.get_act_fn(act_fn),
+            nn.Linear(hidden_dim, hidden_dim))
+
+        node_input_dim = hidden_dim + self.input_dim + self.action_dim
+
+        self.node_mlp = nn.Sequential(
+            nn.Linear(node_input_dim, hidden_dim),
+            utils.get_act_fn(act_fn),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            utils.get_act_fn(act_fn),
+            nn.Linear(hidden_dim, self.input_dim))
+
+        if self.split_gnn:
+            self.edge_mlp1 = self.edge_mlp
+            self.edge_mlp2 = cp.deepcopy(self.edge_mlp1)
+            self.edge_mlp3 = cp.deepcopy(self.edge_mlp1)
+
+            self.node_mlp1 = self.node_mlp
+            self.node_mlp2 = cp.deepcopy(self.node_mlp1)
+
+            del self.node_mlp
+            del self.edge_mlp
+
+        self.edge_list = None
+        self.batch_size = 0
+
+    def _edge_model(self, source, target, edge_attr, source_indices=None, target_indices=None):
+        del edge_attr  # Unused.
+        out = torch.cat([source, target], dim=1)
+
+        if self.split_gnn:
+            ret = torch.zeros((out.size(0), self.hidden_dim), dtype=out.dtype, device=out.device)
+            mask1 = np.logical_and(np.logical_or(source_indices == 0, source_indices == 1),
+                                   np.logical_or(target_indices == 0, target_indices == 1))
+            mask2 = np.logical_and(np.logical_or(np.logical_or(source_indices == 2, source_indices == 3), source_indices == 4),
+                                   np.logical_or(np.logical_or(target_indices == 2, target_indices == 3), target_indices == 4))
+            mask3 = np.logical_and(np.logical_not(mask1), np.logical_not(mask2))
+
+            ret[mask1] = self.edge_mlp1(out[mask1])
+            ret[mask2] = self.edge_mlp2(out[mask2])
+            ret[mask3] = self.edge_mlp3(out[mask3])
+        else:
+            return self.edge_mlp(out)
+
+    def _node_model(self, node_attr, edge_index, edge_attr):
+        if edge_attr is not None:
+            row, col = edge_index
+            agg = utils.unsorted_segment_sum(
+                edge_attr, row, num_segments=node_attr.size(0))
+            out = torch.cat([node_attr, agg], dim=1)
+        else:
+            out = node_attr
+
+        if self.split_gnn:
+            ret = torch.zeros((out.size(0), self.input_dim), dtype=out.dtype, device=out.device)
+            obj12_indices = np.concatenate(
+                [np.arange(0, out.size(0), self.num_objects),
+                 np.arange(1, out.size(0), self.num_objects)])
+            obj345_indices = np.concatenate(
+                [np.arange(2, out.size(0), self.num_objects),
+                 np.arange(3, out.size(0), self.num_objects),
+                 np.arange(4, out.size(0), self.num_objects)])
+            ret[obj12_indices] = self.node_mlp1(out[obj12_indices])
+            ret[obj345_indices] = self.node_mlp2(out[obj345_indices])
+            return ret
+        else:
+            return self.node_mlp(out)
+
+    def _get_edge_list_fully_connected(self, batch_size, num_objects, cuda):
+        # Only re-evaluate if necessary (e.g. if batch size changed).
+        if self.edge_list is None or self.batch_size != batch_size:
+            self.batch_size = batch_size
+
+            # Create fully-connected adjacency matrix for single sample.
+            adj_full = torch.ones(num_objects, num_objects)
+
+            # Remove diagonal.
+            adj_full -= torch.eye(num_objects)
+            self.edge_list = adj_full.nonzero()
+
+            # Copy `batch_size` times and add offset.
+            self.edge_list = self.edge_list.repeat(batch_size, 1)
+            offset = torch.arange(
+                0, batch_size * num_objects, num_objects).unsqueeze(-1)
+            offset = offset.expand(batch_size, num_objects * (num_objects - 1))
+            offset = offset.contiguous().view(-1)
+            self.edge_list += offset.unsqueeze(-1)
+
+            # Transpose to COO format -> Shape: [2, num_edges].
+            self.edge_list = self.edge_list.transpose(0, 1)
+
+            if cuda:
+                self.edge_list = self.edge_list.cuda()
+
+        return self.edge_list
+
+    def forward(self, states, action):
+
+        cuda = states.is_cuda
+        batch_size = states.size(0)
+        num_nodes = states.size(1)
+
+        if self.immovable_bit:
+            # add movable/immovable bit (the first two objects are immovable, this is hardcoded for now)
+            tmp = torch.zeros_like(states[:, :, 0:1])
+            tmp[:, :2, :] = 1.0
+            states = torch.cat([states, tmp], dim=2)
+
+        # states: [batch_size (B), num_objects, embedding_dim]
+        # node_attr: Flatten states tensor to [B * num_objects, embedding_dim]
+        node_attr = states.view(-1, self.input_dim)
+
+        edge_attr = None
+        edge_index = None
+
+        if num_nodes > 1:
+            # edge_index: [B * (num_objects*[num_objects-1]), 2] edge list
+            edge_index = self._get_edge_list_fully_connected(
+                batch_size, num_nodes, cuda)
+
+            row, col = edge_index
+            edge_attr = self._edge_model(
+                node_attr[row], node_attr[col], edge_attr, source_indices=row % self.num_objects,
+                target_indices=col % self.num_objects)
+
+        if not self.ignore_action:
+
+            if self.copy_action:
+                action_vec = utils.to_one_hot(
+                    action, self.action_dim).repeat(1, self.num_objects)
+                action_vec = action_vec.view(-1, self.action_dim)
+            else:
+                action_vec = utils.to_one_hot(
+                    action, self.action_dim * num_nodes)
+                action_vec = action_vec.view(-1, self.action_dim)
+
+            # Attach action to each state
+            node_attr = torch.cat([node_attr, action_vec], dim=-1)
+
+        node_attr = self._node_model(
+            node_attr, edge_index, edge_attr)
+
+        # [batch_size, num_nodes, hidden_dim]
+        node_attr = node_attr.view(batch_size, num_nodes, -1)
+
+        if self.immovable_bit:
+            # object embeddings have an additional bit for movable/immovable objects
+            # we do not need to predict that
+            node_attr = node_attr[:, :, :self.input_dim - 1]
+
+        return node_attr
