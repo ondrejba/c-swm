@@ -8,7 +8,7 @@ matplotlib.use("TkAgg")
 
 def main():
 
-    env = BlockPushing(render_type="shapes", background=BlockPushing.BACKGROUND_DETERMINISTIC)
+    env = BlockPushing(render_type="cubes", background=BlockPushing.BACKGROUND_DETERMINISTIC)
     env.reset()
 
     while True:

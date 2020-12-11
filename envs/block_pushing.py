@@ -34,7 +34,7 @@ def fig2rgb_array(fig):
     return np.fromstring(buffer, dtype=np.uint8).reshape(height, width, 3)
 
 
-def render_cubes(positions, width):
+def render_cubes(positions, width, background_color=None):
     voxels = np.zeros((width, width, width), dtype=np.bool)
     colors = np.empty(voxels.shape, dtype=object)
 
@@ -44,9 +44,12 @@ def render_cubes(positions, width):
         voxels[pos[0], pos[1], 0] = True
         colors[pos[0], pos[1], 0] = cols[i]
 
+    if background_color is None:
+        background_color = (0.5, 0.5, 0.5, 1.0)
+
     fig = plt.figure()
     ax = Axes3D(fig)
-    ax.w_zaxis.set_pane_color((0.5, 0.5, 0.5, 1.0))
+    ax.w_zaxis.set_pane_color(background_color)
     ax.w_xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
     ax.w_yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
     ax.w_zaxis.line.set_lw(0.)
@@ -120,7 +123,7 @@ class BlockPushing(gym.Env):
 
     def render(self):
         # background color is only implemented for some render types
-        assert self.background == self.BACKGROUND_WHITE or self.render_type in ["shapes"]
+        assert self.background == self.BACKGROUND_WHITE or self.render_type in ["shapes", "cubes"]
 
         if self.render_type == 'grid':
             im = np.zeros((3, self.width, self.height))
@@ -153,23 +156,29 @@ class BlockPushing(gym.Env):
                     im[rr, cc, :] = self.colors[idx][:3]
             return im.transpose([2, 0, 1])
         elif self.render_type == 'cubes':
-            im = render_cubes(self.objects, self.width)
+            im = render_cubes(self.objects, self.width, background_color=self.get_background_color_())
             return im.transpose([2, 0, 1])
 
-    def set_background_color_shapes_(self, im):
+    def get_background_color_(self):
 
         if self.background == self.BACKGROUND_WHITE:
-            return im
+            # on a second thought, the default background is actually black or gray
+            return None
         elif self.background == self.BACKGROUND_RANDOM:
             idx = np.random.randint(len(self.background_colors))
-            color = self.background_colors[idx]
+            return self.background_colors[idx]
         elif self.background in [self.BACKGROUND_RANDOM_SAME_EP, self.BACKGROUND_DETERMINISTIC]:
-            color = self.background_colors[self.background_index]
+            return self.background_colors[self.background_index]
         else:
             assert False
 
-        for i in range(3):
-            im[:, :, i] = color[i]
+    def set_background_color_shapes_(self, im):
+
+        color = self.get_background_color_()
+
+        if color is not None:
+            for i in range(3):
+                im[:, :, i] = color[i]
 
         return im
 
