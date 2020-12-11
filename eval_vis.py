@@ -71,7 +71,6 @@ model = modules.ContrastiveSWM(
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
     no_loss_first_two=args.no_loss_first_two,
-    bilinear_loss=args.bilinear_energy,
     encoder=args.encoder).to(device)
 
 model.load_state_dict(torch.load(model_file))

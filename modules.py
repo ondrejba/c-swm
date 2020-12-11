@@ -192,36 +192,42 @@ class ContrastiveSWM(nn.Module):
         perm = np.random.permutation(batch_size)
         neg_obs = obs[perm]
         neg_state = state[perm]
-        neg_state_ids = state_ids[perm]
+
+        neg_state_ids = None
+        if state_ids is not None:
+            neg_state_ids = state_ids[perm]
 
         return neg_obs, neg_state, neg_state_ids
 
     def negative_loss_(self, state, neg_state):
 
-        zeros = torch.zeros_like(self.pos_loss)
-        self.neg_loss = torch.max(
-            zeros, self.hinge - self.energy(
-                state, None, neg_state, no_trans=True))
+        self.neg_loss = self.hinge - self.energy(state, None, neg_state, no_trans=True)
+        zeros = torch.zeros_like(self.neg_loss)
+        self.neg_loss = torch.max(zeros, self.neg_loss)
 
     def postprocess_negative_loss_(self, obs, neg_obs, state_ids, neg_state_ids, minmax_dists):
 
-        if self.reject_negative:
+        if self.nl_type == self.NL_STANDARD:
+
+            dists = torch.ones_like(self.neg_loss)
+
+        elif self.nl_type == self.NL_BISIM:
 
             dists = self.get_bisim_dists_(state_ids, neg_state_ids)
 
-        elif self.bisim_metric is not None or self.bisim_model is not None:
+        elif self.nl_type in [self.NL_BISIM_METRIC, self.NL_BISIM_METRIC_EPS]:
 
-            if self.bisim_metric is not None:
-                dists = self.get_bisim_metric_dists_(state_ids, neg_state_ids)
-            else:
-                dists = self.get_bisim_model_dists_(obs, neg_obs, minmax_dists)
+            dists = self.get_bisim_metric_dists_(state_ids, neg_state_ids)
 
-            if self.bisim_eps is not None:
+            if self.nl_type == self.NL_BISIM_METRIC_EPS:
                 self.apply_bisim_eps_(dists)
 
-        else:
+        elif self.nl_type in [self.NL_BISIM_MODEL, self.NL_BISIM_MODEL_EPS]:
 
-            dists = torch.ones_like(self.neg_loss)
+            dists = self.get_bisim_model_dists_(obs, neg_obs, minmax_dists)
+
+            if self.nl_type == self.NL_BISIM_MODEL_EPS:
+                self.apply_bisim_eps_(dists)
 
         self.weight_negative_loss_(dists)
 
@@ -241,6 +247,26 @@ class ContrastiveSWM(nn.Module):
         if minmax_dists["min"] is None:
             minmax_dists["min"] = dists.min()
             minmax_dists["max"] = dists.max()
+
+        """
+        import matplotlib
+        matplotlib.use("TkAgg")
+        import matplotlib.pyplot as plt
+
+        dists_np = dists.cpu().numpy()
+        argsort = np.argsort(dists_np)
+
+        print(minmax_dists)
+
+        for idx in argsort[:10]:
+            print(idx, dists_np[idx])
+
+            plt.subplot(1, 2, 1)
+            plt.imshow(obs[idx].cpu().numpy().transpose((1, 2, 0)))
+            plt.subplot(1, 2, 2)
+            plt.imshow(neg_obs[idx].cpu().numpy().transpose((1, 2, 0)))
+            plt.show()
+        """
 
         return (dists - minmax_dists["min"]) / (minmax_dists["max"] - minmax_dists["min"])
 

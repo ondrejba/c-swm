@@ -71,7 +71,6 @@ model = modules.ContrastiveSWM(
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
     no_loss_first_two=args.no_loss_first_two,
-    bilinear_loss=args.bilinear_energy,
     bisim_model=make_pairwise_encoder() if args.bisim_model_path else None,
     encoder=args.encoder).to(device)
 
