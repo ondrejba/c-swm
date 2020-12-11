@@ -142,6 +142,48 @@ register(
 )
 
 register(
+    'CubesBgRandomTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'cubes', 'background': BlockPushing.BACKGROUND_RANDOM},
+)
+
+register(
+    'CubesBgRandomEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'cubes', 'background': BlockPushing.BACKGROUND_RANDOM},
+)
+
+register(
+    'CubesBgSameEpTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'cubes', 'background': BlockPushing.BACKGROUND_RANDOM_SAME_EP},
+)
+
+register(
+    'CubesBgSameEpEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'cubes', 'background': BlockPushing.BACKGROUND_RANDOM_SAME_EP},
+)
+
+register(
+    'CubesBgDeterministicTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'cubes', 'background': BlockPushing.BACKGROUND_DETERMINISTIC},
+)
+
+register(
+    'CubesBgDeterministicEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'cubes', 'background': BlockPushing.BACKGROUND_DETERMINISTIC},
+)
+
+register(
     'CubesCursorTrain-v0',
     entry_point='envs.block_pushing_cursor:BlockPushingCursor',
     max_episode_steps=100,
