@@ -162,7 +162,6 @@ model = modules.ContrastiveSWM(
     gamma=args.gamma,
     bisim_metric=bisim_metric,
     bisim_eps=args.bisim_eps,
-    bisim_model=bisim_model,
     next_state_neg=args.next_state_neg,
     nl_type=args.nl_type,
     encoder=args.encoder).to(device)
@@ -172,6 +171,10 @@ model.apply(utils.weights_init)
 optimizer = torch.optim.Adam(
     model.parameters(),
     lr=args.learning_rate)
+
+# avoid re-initializing the model and adding to the trainable parameters list
+model.bisim_model = bisim_model
+model.bisim_model.to(device)
 
 if args.decoder:
     if args.encoder == 'large':
