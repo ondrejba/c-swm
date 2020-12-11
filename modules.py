@@ -8,6 +8,14 @@ from torch import nn
 
 
 class ContrastiveSWM(nn.Module):
+
+    NL_STANDARD = 0
+    NL_BISIM = 1
+    NL_BISIM_METRIC = 2
+    NL_BISIM_METRIC_EPS = 3
+    NL_BISIM_MODEL = 4
+    NL_BISIM_MODEL_EPS = 5
+
     """Main module for a Contrastively-trained Structured World Model (C-SWM).
 
     Args:
@@ -22,8 +30,9 @@ class ContrastiveSWM(nn.Module):
                  num_objects, hinge=1., sigma=0.5, encoder='large',
                  ignore_action=False, copy_action=False, split_mlp=False,
                  same_ep_neg=False, only_same_ep_neg=False, immovable_bit=False,
-                 split_gnn=False, no_loss_first_two=False, bilinear_loss=False,
-                 gamma=1.0, reject_negative=False):
+                 split_gnn=False, no_loss_first_two=False,
+                 gamma=1.0, bisim_metric=None, bisim_eps=None,
+                 bisim_model=None, nl_type=NL_STANDARD, next_state_neg=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -39,9 +48,17 @@ class ContrastiveSWM(nn.Module):
         self.only_same_ep_neg = only_same_ep_neg
         self.split_gnn = split_gnn
         self.no_loss_first_two = no_loss_first_two
-        self.bilinear_loss = bilinear_loss
         self.gamma = gamma
-        self.reject_negative = reject_negative
+        self.bisim_metric = bisim_metric
+        self.bisim_eps = bisim_eps
+        self.bisim_model = bisim_model
+        self.nl_type = nl_type
+        self.next_state_neg = next_state_neg
+
+        assert self.nl_type in [
+            self.NL_STANDARD, self.NL_BISIM, self.NL_BISIM_METRIC, self.NL_BISIM_METRIC_EPS,
+            self.NL_BISIM_MODEL, self.NL_BISIM_MODEL_EPS
+        ]
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -113,40 +130,23 @@ class ContrastiveSWM(nn.Module):
         else:
             return norm * diff.pow(2).sum(2).mean(1)
 
-    def bilinear_energy(self, state, action, next_state, no_trans=False):
-
-        new_shape = (state.size(0), state.size(1) * state.size(2))
-
-        if no_trans:
-            left = state.reshape(new_shape)
-            right = next_state.reshape(new_shape)
-        else:
-            pred_trans = self.transition_model(state, action)
-            left = (state + pred_trans).reshape(new_shape)
-            right = next_state.reshape(new_shape)
-
-        return (left.matmul(self.bilinear_matrix) * right).sum(1)
-
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
 
     def contrastive_loss(self, obs, action, next_obs, state_ids=None, next_state_ids=None, custom_negs=None,
                          custom_neg_state_ids=None):
 
-        objs = self.obj_extractor(obs)
-        next_objs = self.obj_extractor(next_obs)
-
-        state = self.obj_encoder(objs)
-        next_state = self.obj_encoder(next_objs)
+        state, next_state = self.extract_objects_(obs, next_obs)
 
         # Sample negative state across episodes at random
-        batch_size = state.size(0)
-        perm = np.random.permutation(batch_size)
-        neg_state = state[perm]
+        neg_obs, neg_state, neg_state_ids = self.create_negatives_(obs, state, state_ids)
+
+        minmax_dists = {
+            "min": None,
+            "max": None
+        }
 
         self.pos_loss = self.energy(state, action, next_state)
-        zeros = torch.zeros_like(self.pos_loss)
-
         self.pos_loss = self.pos_loss.mean()
 
         if custom_negs is not None:
@@ -154,49 +154,131 @@ class ContrastiveSWM(nn.Module):
             custom_neg_objs = self.obj_extractor(custom_negs)
             custom_neg_state = self.obj_encoder(custom_neg_objs)
 
-            self.neg_loss = torch.max(
-                zeros, self.hinge - self.energy(
-                    state, None, custom_neg_state, no_trans=True))
-
-            if self.reject_negative:
-                neg_mask = 1.0 - torch.all(state_ids == custom_neg_state_ids, dim=1).float()
-                self.neg_loss = self.neg_loss * neg_mask
-                self.neg_loss = self.neg_loss.sum() / neg_mask.sum()
-            else:
-                self.neg_loss = self.neg_loss.mean()
+            self.negative_loss_(state, custom_neg_state)
+            self.postprocess_negative_loss_(obs, custom_negs, state_ids, custom_neg_state_ids, minmax_dists)
 
         else:
 
-            self.neg_loss = torch.max(
-                zeros, self.hinge - self.energy(
-                    state, action, neg_state, no_trans=True))
+            self.negative_loss_(state, neg_state)
+            self.postprocess_negative_loss_(obs, neg_obs, state_ids, neg_state_ids, minmax_dists)
 
-            if self.reject_negative:
-                neg_state_ids = state_ids[perm]
-                neg_mask = 1.0 - torch.all(state_ids == neg_state_ids, dim=1).float()
-                self.neg_loss = self.neg_loss * neg_mask
-                self.neg_loss = self.neg_loss.sum() / neg_mask.sum()
-            else:
-                self.neg_loss = self.neg_loss.mean()
+        if self.next_state_neg:
 
-            if state_ids is not None and next_state_ids is not None:
-                mask = 1.0 - torch.all(state_ids == next_state_ids, dim=1).float()
+            tmp_neg_loss = self.neg_loss
 
-                tmp_neg_loss = torch.max(
-                    zeros, self.hinge - self.energy(
-                        state, None, next_state, no_trans=True))
-                tmp_neg_loss *= mask
-                tmp_neg_loss = tmp_neg_loss.sum() / mask.sum()
+            self.negative_loss_(state, next_state)
+            self.postprocess_negative_loss_(obs, next_obs, state_ids, next_state_ids, minmax_dists)
 
-                if self.only_same_ep_neg:
-                    self.neg_loss = tmp_neg_loss
-                else:
-                    self.neg_loss += tmp_neg_loss
-                    self.neg_loss /= 2
+            self.neg_loss += tmp_neg_loss
+            self.neg_loss /= 2
 
         loss = self.pos_loss + self.gamma * self.neg_loss
 
         return loss
+
+    def extract_objects_(self, obs, next_obs):
+
+        objs = self.obj_extractor(obs)
+        next_objs = self.obj_extractor(next_obs)
+
+        state = self.obj_encoder(objs)
+        next_state = self.obj_encoder(next_objs)
+
+        return state, next_state
+
+    def create_negatives_(self, obs, state, state_ids):
+
+        batch_size = state.size(0)
+        perm = np.random.permutation(batch_size)
+        neg_obs = obs[perm]
+        neg_state = state[perm]
+
+        neg_state_ids = None
+        if state_ids is not None:
+            neg_state_ids = state_ids[perm]
+
+        return neg_obs, neg_state, neg_state_ids
+
+    def negative_loss_(self, state, neg_state):
+
+        self.neg_loss = self.hinge - self.energy(state, None, neg_state, no_trans=True)
+        zeros = torch.zeros_like(self.neg_loss)
+        self.neg_loss = torch.max(zeros, self.neg_loss)
+
+    def postprocess_negative_loss_(self, obs, neg_obs, state_ids, neg_state_ids, minmax_dists):
+
+        if self.nl_type == self.NL_STANDARD:
+
+            dists = torch.ones_like(self.neg_loss)
+
+        elif self.nl_type == self.NL_BISIM:
+
+            dists = self.get_bisim_dists_(state_ids, neg_state_ids)
+
+        elif self.nl_type in [self.NL_BISIM_METRIC, self.NL_BISIM_METRIC_EPS]:
+
+            dists = self.get_bisim_metric_dists_(state_ids, neg_state_ids)
+
+            if self.nl_type == self.NL_BISIM_METRIC_EPS:
+                self.apply_bisim_eps_(dists)
+
+        elif self.nl_type in [self.NL_BISIM_MODEL, self.NL_BISIM_MODEL_EPS]:
+
+            dists = self.get_bisim_model_dists_(obs, neg_obs, minmax_dists)
+
+            if self.nl_type == self.NL_BISIM_MODEL_EPS:
+                self.apply_bisim_eps_(dists)
+
+        self.weight_negative_loss_(dists)
+
+    def get_bisim_dists_(self, state_ids, neg_state_ids):
+
+        return 1.0 - torch.all(state_ids == neg_state_ids, dim=1).float()
+
+    def get_bisim_metric_dists_(self, state_ids, neg_state_ids):
+
+        return self.bisim_metric[state_ids, neg_state_ids]
+
+    def get_bisim_model_dists_(self, obs, neg_obs, minmax_dists):
+
+        stack = torch.cat([obs, neg_obs], dim=1)
+        dists = self.bisim_model(stack)[:, 0].detach()
+
+        if minmax_dists["min"] is None:
+            minmax_dists["min"] = dists.min()
+            minmax_dists["max"] = dists.max()
+
+        """
+        import matplotlib
+        matplotlib.use("TkAgg")
+        import matplotlib.pyplot as plt
+
+        dists_np = dists.cpu().numpy()
+        argsort = np.argsort(dists_np)
+
+        print(minmax_dists)
+
+        for idx in argsort[:10]:
+            print(idx, dists_np[idx])
+
+            plt.subplot(1, 2, 1)
+            plt.imshow(obs[idx].cpu().numpy().transpose((1, 2, 0)))
+            plt.subplot(1, 2, 2)
+            plt.imshow(neg_obs[idx].cpu().numpy().transpose((1, 2, 0)))
+            plt.show()
+        """
+
+        return (dists - minmax_dists["min"]) / (minmax_dists["max"] - minmax_dists["min"])
+
+    def apply_bisim_eps_(self, dists):
+
+        dists[dists <= self.bisim_eps] = 0.0
+        dists[dists > self.bisim_eps] = 1.0
+
+    def weight_negative_loss_(self, dists):
+
+        self.neg_loss = self.neg_loss * dists
+        self.neg_loss = self.neg_loss.sum() / dists.sum()
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))

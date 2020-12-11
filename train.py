@@ -8,6 +8,7 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
+from train_sim import make_pairwise_encoder
 
 from torch.utils import data
 import torch.nn.functional as F
@@ -49,11 +50,14 @@ parser.add_argument('--immovable-bit', action='store_true', default=False)
 parser.add_argument('--same-ep-neg', action='store_true', default=False)
 parser.add_argument('--only-same-ep-neg', action='store_true', default=False)
 parser.add_argument('--no-loss-first-two', action='store_true', default=False)
-parser.add_argument('--bilinear-energy', action='store_true', default=False)
 parser.add_argument('--bisim', action='store_true', default=False)
 parser.add_argument('--gamma', type=float, default=1.0)
-parser.add_argument('--reject-negative', default=False, action='store_true')
 parser.add_argument('--custom-neg', default=False, action='store_true')
+parser.add_argument('--bisim-metric-path')
+parser.add_argument('--bisim-eps', type=float)
+parser.add_argument('--bisim-model-path')
+parser.add_argument('--next-state-neg', default=False, action="store_true")
+parser.add_argument('--nl-type', default=0, type=int)
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -128,6 +132,17 @@ train_loader = data.DataLoader(
 obs = train_loader.__iter__().next()[0]
 input_shape = obs[0].size()
 
+# maybe load bisim metric and turn it into torch tensor on the selected device
+bisim_metric = None
+if args.bisim_metric_path is not None:
+    bisim_metric = torch.tensor(np.load(args.bisim_metric_path), dtype=torch.float32, device=device)
+
+# maybe load bisim model
+bisim_model = None
+if args.bisim_model_path is not None:
+    bisim_model = make_pairwise_encoder()
+    bisim_model.load_state_dict(torch.load(args.bisim_model_path))
+
 model = modules.ContrastiveSWM(
     embedding_dim=args.embedding_dim,
     hidden_dim=args.hidden_dim,
@@ -144,9 +159,12 @@ model = modules.ContrastiveSWM(
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
     no_loss_first_two=args.no_loss_first_two,
-    bilinear_loss=args.bilinear_energy,
     gamma=args.gamma,
-    reject_negative=args.reject_negative,
+    bisim_metric=bisim_metric,
+    bisim_eps=args.bisim_eps,
+    bisim_model=bisim_model,
+    next_state_neg=args.next_state_neg,
+    nl_type=args.nl_type,
     encoder=args.encoder).to(device)
 
 model.apply(utils.weights_init)

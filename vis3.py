@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from torch.utils import data
 import numpy as np
 from collections import defaultdict
+from train_sim import make_pairwise_encoder
 
 import modules
 
@@ -71,7 +72,7 @@ model = modules.ContrastiveSWM(
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
     no_loss_first_two=args.no_loss_first_two,
-    bilinear_loss=args.bilinear_energy,
+    bisim_model=make_pairwise_encoder() if args.bisim_model_path else None,
     encoder=args.encoder).to(device)
 
 model.load_state_dict(torch.load(model_file))
