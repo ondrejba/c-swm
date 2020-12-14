@@ -37,7 +37,7 @@ class Sim(nn.Module):
         # get reward distances
         if state_id_pairs.shape[1] > 2:
             size = state_id_pairs.shape[1] // 2
-            reward_dists = (torch.all(state_id_pairs[:, :size] != state_id_pairs[:, size:], dim=1)).float()
+            reward_dists = 1 - (torch.all(state_id_pairs[:, :size] == state_id_pairs[:, size:], dim=1)).float()
         else:
             reward_dists = (state_id_pairs[:, 0] != state_id_pairs[:, 1]).float()
 

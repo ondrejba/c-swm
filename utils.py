@@ -209,6 +209,53 @@ class StateTransitionsDatasetStateIdsNegs(StateTransitionsDataset):
         return obs, action, next_obs, state_ids, next_state_ids, neg_obs, neg_state_id
 
 
+class StateTransitionsDatasetTwins(StateTransitionsDataset):
+
+    MODE_RANDOM = 0
+    MODE_NEXT = 1
+    MODE_WINDOW = 2
+
+    def __init__(self, hdf5_file, mode, window_size=5):
+
+        super(StateTransitionsDatasetTwins, self).__init__(hdf5_file)
+
+        assert mode in [self.MODE_RANDOM, self.MODE_NEXT, self.MODE_WINDOW]
+
+        self.mode = mode
+        self.window_size = window_size
+
+    def __getitem__(self, idx):
+
+        ep, step = self.idx2episode[idx]
+
+        obs = to_float(self.experience_buffer[ep]['obs'][step])
+        action = self.experience_buffer[ep]['action'][step]
+        next_obs = to_float(self.experience_buffer[ep]['next_obs'][step])
+        state_ids = self.experience_buffer[ep]['state_ids'][step]
+
+        if self.mode == self.MODE_RANDOM:
+            # random step from the same episode
+            twin_step = np.random.randint(len(self.experience_buffer[ep]['obs']))
+        elif self.mode == self.MODE_WINDOW:
+            # random step within a window of the current step
+            twin_step = np.random.randint(
+                max(0, step - self.window_size), min(len(self.experience_buffer[ep]['obs']), step + self.window_size)
+            )
+        else:
+            # next step or the previous step if we are at the end
+            if step == len(self.experience_buffer[ep]['obs']) - 1:
+                twin_step = step - 1
+            else:
+                twin_step = step + 1
+
+        twin_obs = to_float(self.experience_buffer[ep]['obs'][twin_step])
+        twin_action = self.experience_buffer[ep]['action'][twin_step]
+        twin_next_obs = to_float(self.experience_buffer[ep]['next_obs'][twin_step])
+        twin_state_ids = self.experience_buffer[ep]['state_ids'][twin_step]
+
+        return obs, action, next_obs, state_ids, twin_obs, twin_action, twin_next_obs, twin_state_ids
+
+
 class PathDataset(data.Dataset):
     """Create dataset of {(o_t, a_t)}_{t=1:N} paths from replay buffer.
     """

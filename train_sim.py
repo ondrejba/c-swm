@@ -43,7 +43,8 @@ def make_pairwise_encoder():
     return nn.Sequential(pairwise_cnn, dist_mlp)
 
 
-def train(model, opt, device, train_loader, epochs, log_interval, model_file, beta_exp, update_freq, metric):
+def train(model, opt, device, train_loader, epochs, log_interval, model_file, beta_exp, update_freq, metric,
+          twins):
 
     # Train model.
     print('Starting model training...')
@@ -68,8 +69,17 @@ def train(model, opt, device, train_loader, epochs, log_interval, model_file, be
             data_batch = [tensor.to(device) for tensor in data_batch]
             opt.zero_grad()
 
+            if twins:
+                obs, actions, next_obs, state_ids, twin_obs, twin_actions, twin_next_obs, twin_state_ids = data_batch
+                obs = torch.cat([obs, twin_obs], dim=0)
+                actions = torch.cat([actions, twin_actions], dim=0)
+                next_obs = torch.cat([next_obs, twin_next_obs], dim=0)
+                state_ids = torch.cat([state_ids, twin_state_ids], dim=0)
+            else:
+                obs, actions, next_obs, state_ids, _ = data_batch
+
             beta = 1 - one_minus_beta
-            ret = model.loss(*data_batch[:3], beta, state_ids=data_batch[3], metric=metric)
+            ret = model.loss(obs, actions, next_obs, beta, state_ids=state_ids, metric=metric)
 
             if metric is not None:
                 loss, abs_error = ret
@@ -86,6 +96,7 @@ def train(model, opt, device, train_loader, epochs, log_interval, model_file, be
             abs_errors.append(abs_error.item())
 
             if batch_idx % log_interval == 0:
+                print(beta)
                 print(
                     'Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                         epoch, batch_idx * len(data_batch[0]),
@@ -146,7 +157,10 @@ def main(args):
 
     opt = optim.Adam(params=sim.encoder.parameters(), lr=1e-2)
 
-    dataset = utils.StateTransitionsDatasetStateIds(hdf5_file=args.dataset)
+    if args.twins:
+        dataset = utils.StateTransitionsDatasetTwins(hdf5_file=args.dataset, mode=args.twins_mode)
+    else:
+        dataset = utils.StateTransitionsDatasetStateIds(hdf5_file=args.dataset)
 
     train_loader = data.DataLoader(
         dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
@@ -155,13 +169,13 @@ def main(args):
     if args.bisim_metric_path is not None:
         bisim_metric = torch.tensor(np.load(args.bisim_metric_path), dtype=torch.float32, device=device)
 
-    epochs = 100
     log_interval = 20
     beta_exp = 0.9
     update_freq = 500
 
     losses = train(
-        sim, opt, device, train_loader, epochs, log_interval, model_file, beta_exp, update_freq, bisim_metric
+        sim, opt, device, train_loader, args.epochs, log_interval, model_file, beta_exp, update_freq, bisim_metric,
+        args.twins
     )
     plot_loss(losses, loss_file)
 
@@ -180,7 +194,10 @@ if __name__ == "__main__":
                         help='Path to checkpoints.')
     parser.add_argument('--batch-size', type=int, default=100,
                         help='Batch size.')
+    parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--bisim-metric-path')
+    parser.add_argument('--twins', default=False, action='store_true')
+    parser.add_argument('--twins-mode', type=int, default=0)
     parser.add_argument('--no-cuda', default=False, action='store_true')
 
     parsed = parser.parse_args()
