@@ -44,7 +44,7 @@ def make_pairwise_encoder():
 
 
 def train(model, opt, device, train_loader, epochs, log_interval, model_file, beta_exp, update_freq, metric,
-          twins):
+          twins, zero_beta):
 
     # Train model.
     print('Starting model training...')
@@ -78,7 +78,11 @@ def train(model, opt, device, train_loader, epochs, log_interval, model_file, be
             else:
                 obs, actions, next_obs, state_ids, _ = data_batch
 
-            beta = 1 - one_minus_beta
+            if zero_beta:
+                beta = 0
+            else:
+                beta = 1 - one_minus_beta
+
             ret = model.loss(obs, actions, next_obs, beta, state_ids=state_ids, metric=metric)
 
             if metric is not None:
@@ -151,8 +155,13 @@ def main(args):
     encoder = make_pairwise_encoder()
     target_encoder = make_pairwise_encoder()
 
+    if args.zero_beta:
+        gamma = 0
+    else:
+        gamma = 0.9
+
     sim = Sim(encoder, target_encoder, {
-        Constants.GAMMA: 0.9
+        Constants.GAMMA: gamma
     }).to(device)
 
     opt = optim.Adam(params=sim.encoder.parameters(), lr=1e-2)
@@ -175,7 +184,7 @@ def main(args):
 
     losses = train(
         sim, opt, device, train_loader, args.epochs, log_interval, model_file, beta_exp, update_freq, bisim_metric,
-        args.twins
+        args.twins, args.zero_beta
     )
     plot_loss(losses, loss_file)
 
@@ -198,6 +207,7 @@ if __name__ == "__main__":
     parser.add_argument('--bisim-metric-path')
     parser.add_argument('--twins', default=False, action='store_true')
     parser.add_argument('--twins-mode', type=int, default=0)
+    parser.add_argument('--zero-beta', default=False, action='store_true')
     parser.add_argument('--no-cuda', default=False, action='store_true')
 
     parsed = parser.parse_args()

@@ -238,9 +238,13 @@ class StateTransitionsDatasetTwins(StateTransitionsDataset):
             twin_step = np.random.randint(len(self.experience_buffer[ep]['obs']))
         elif self.mode == self.MODE_WINDOW:
             # random step within a window of the current step
-            twin_step = np.random.randint(
-                max(0, step - self.window_size), min(len(self.experience_buffer[ep]['obs']), step + self.window_size)
-            )
+            while True:
+                twin_step = np.random.randint(
+                    max(0, step - self.window_size), min(len(self.experience_buffer[ep]['obs']), step + self.window_size)
+                )
+                # sample a different step than the current one
+                if twin_step != step:
+                    break
         else:
             # next step or the previous step if we are at the end
             if step == len(self.experience_buffer[ep]['obs']) - 1:

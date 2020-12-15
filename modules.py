@@ -268,7 +268,8 @@ class ContrastiveSWM(nn.Module):
             plt.show()
         """
 
-        return (dists - minmax_dists["min"]) / (minmax_dists["max"] - minmax_dists["min"])
+        return dists
+        #return (dists - minmax_dists["min"]) / (minmax_dists["max"] - minmax_dists["min"])
 
     def apply_bisim_eps_(self, dists):
 
