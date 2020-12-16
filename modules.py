@@ -248,26 +248,6 @@ class ContrastiveSWM(nn.Module):
             minmax_dists["min"] = dists.min()
             minmax_dists["max"] = dists.max()
 
-        """
-        import matplotlib
-        matplotlib.use("TkAgg")
-        import matplotlib.pyplot as plt
-
-        dists_np = dists.cpu().numpy()
-        argsort = np.argsort(dists_np)
-
-        print(minmax_dists)
-
-        for idx in argsort[:10]:
-            print(idx, dists_np[idx])
-
-            plt.subplot(1, 2, 1)
-            plt.imshow(obs[idx].cpu().numpy().transpose((1, 2, 0)))
-            plt.subplot(1, 2, 2)
-            plt.imshow(neg_obs[idx].cpu().numpy().transpose((1, 2, 0)))
-            plt.show()
-        """
-
         return dists
         #return (dists - minmax_dists["min"]) / (minmax_dists["max"] - minmax_dists["min"])
 

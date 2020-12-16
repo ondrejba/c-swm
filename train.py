@@ -173,8 +173,9 @@ optimizer = torch.optim.Adam(
     lr=args.learning_rate)
 
 # avoid re-initializing the model and adding to the trainable parameters list
-model.bisim_model = bisim_model
-model.bisim_model.to(device)
+if bisim_model is not None:
+    model.bisim_model = bisim_model
+    model.bisim_model.to(device)
 
 if args.decoder:
     if args.encoder == 'large':

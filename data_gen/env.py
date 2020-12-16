@@ -113,7 +113,7 @@ if __name__ == '__main__':
         ob = env.reset()
 
         if args.atari:
-            assert not args.save_state_ids # not implemented
+
             # Burn-in steps
             for _ in range(warmstart):
                 action = agent.act(ob, reward, done)
@@ -127,9 +127,15 @@ if __name__ == '__main__':
                     np.concatenate((ob, prev_ob), axis=0))
                 prev_ob = ob
 
+                if args.save_state_ids:
+                    replay_buffer[i]['state_ids'].append(np.array(env.unwrapped._get_ram(), dtype=np.int32))
+
                 action = agent.act(ob, reward, done)
                 ob, reward, done, _ = env.step(action)
                 ob = crop_normalize(ob, crop)
+
+                if args.save_state_ids:
+                    replay_buffer[i]['next_state_ids'].append(np.array(env.unwrapped._get_ram(), dtype=np.int32))
 
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['next_obs'].append(
