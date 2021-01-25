@@ -200,20 +200,50 @@ class C4Conv(nn.Module):
         k = 1 / torch.sqrt(torch.tensor(size_in, dtype=torch.float))
         weights *= k
         self.weights = torch.nn.parameter.Parameter(weights)
-        bias = torch.rand(size_out)
-        bias -= 0.5
-        bias *= k
+        #bias = torch.rand(size_out)
+        #bias -= 0.5
+        #bias *= k
+        bias = torch.zeros(size_out)
         self.bias = torch.nn.parameter.Parameter(bias)
         mat = torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0)
         self.register_buffer('mat', mat)
     
     def updateKernel(self):
+        #V1,V2
         self.mat=torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0)
+        
+        #V3
+        #mat_shape = self.mat.shape
+        #self.mat=torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0) \
+        #    .permute(0,2,1,3).reshape(1,1,mat_shape[0],mat_shape[2],mat_shape[1]*mat_shape[3])
+
+    def rollAxes(self,T):
+        return T.permute(len(T.shape)-1,*list(range(0,len(T.shape)-1)))
+
 
     def forward(self, x):
         #TODO: really should only call after update
         self.updateKernel()
+    
+        #V1
         w_times_x= torch.einsum('ghij,...hj->...gi',self.mat, x)
+
+        #V2
+        # mat_shape = self.mat.shape
+        # x_shape = x.shape
+        # self.mat = self.mat.permute(0,2,1,3).reshape(1,1,mat_shape[0],mat_shape[2],mat_shape[1]*mat_shape[3])
+        # x = x.reshape(*x_shape[0:2],1,x_shape[-2]*x_shape[-1],1)
+        # w_times_x = torch.matmul(self.mat,x).squeeze(-1)
+
+        #V3
+        # x_shape = x.shape
+        # w_times_x = torch.matmul(
+        #     self.mat #.permute(0,2,1,3).reshape(1,1,mat_shape[0],mat_shape[2],mat_shape[1]*mat_shape[3])
+        #     ,
+        #     x.reshape(*x_shape[0:2],1,x_shape[-2]*x_shape[-1],1)
+        #     ).squeeze(-1)
+        #print(torch.max(w_times_x_2-w_times_x).item())
+
         return torch.add(w_times_x, self.bias)  # w times x + b
 
 
@@ -238,12 +268,16 @@ class RotEncoderMLP(nn.Module):
         self.act1 = utils.get_act_fn(act_fn)
         self.act2 = utils.get_act_fn(act_fn)
 
+
+
     def forward(self, ins):
         """ 
         input: 2D Shapes (batch, num_objects, 5, 5)
 
         """
+        #[batch,num_objects,5,5]
         h_flat = self.orbit_stack(ins)
+        #[batch,num_objects,4,7]
         h = self.act1(self.fc1(h_flat))
         h = self.act2(self.ln(self.fc2(h)))
         return self.fc3(h)
@@ -304,6 +338,10 @@ class RotTransitionGNN(torch.nn.Module):
             utils.get_act_fn(act_fn),
             C4Conv(hidden_dim, hidden_dim))
         
+        # [B X O x (H + 4) ]
+        # [B x O x 4 x (H + 1)] (b,o,,i)  (1,0,0,0)  -->   (0,1,0,0)
+        # [B x O x 4 x (H + 4)]
+
         node_input_dim = hidden_dim + self.input_dim + 1 #action_dim = 1 vs. 4
 
         self.node_mlp = nn.Sequential(
@@ -412,10 +450,9 @@ class RotTransitionGNN(torch.nn.Module):
             states = torch.cat([states, tmp], dim=2)
 
         # states: [batch_size (B), num_objects, embedding_dim]
-        # node_attr: Flatten states tensor to [B * num_objects, embedding_dim]
-        #print("states:",states.shape)
+        # node_attr: Flatten states tensor to [B * num_objects, embedding_dim])
         #node_attr = states.view(-1, self.input_dim)
-        node_attr = states.reshape(-1, 4, self.input_dim)
+        node_attr = states.reshape(-1, 4, self.input_dim).contiguous()
 
         edge_attr = None
         edge_index = None
@@ -442,7 +479,8 @@ class RotTransitionGNN(torch.nn.Module):
                 action_vec = action_vec.view(-1, self.action_dim)
 
             # Attach action to each state
-            node_attr = torch.cat([node_attr, torch.flip(action_vec.unsqueeze(2),dims=[1])], dim=-1)
+            #node_attr = torch.cat([node_attr, torch.flip(action_vec.unsqueeze(2),dims=[1])], dim=-1)
+            node_attr = torch.cat([node_attr, action_vec.unsqueeze(2)], dim=-1)
 
         node_attr = self._node_model(
             node_attr, edge_index, edge_attr)

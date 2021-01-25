@@ -101,6 +101,7 @@ print = logger.info
 pickle.dump({'args': args}, open(meta_file, "wb"))
 
 device = torch.device('cuda' if args.cuda else 'cpu')
+device = 'cpu'  #Debug
 
 dataset = utils.StateTransitionsDataset(
     hdf5_file=args.dataset)
@@ -182,6 +183,7 @@ for epoch in range(1, args.epochs + 1):
             loss = F.binary_cross_entropy(
                 rec, obs, reduction='sum') / obs.size(0)
 
+
             next_state_pred = state + model.transition_model(state, action)
             next_rec = torch.sigmoid(decoder(next_state_pred))
             next_loss = F.binary_cross_entropy(
@@ -215,3 +217,4 @@ for epoch in range(1, args.epochs + 1):
     if avg_loss < best_loss:
         best_loss = avg_loss
         torch.save(model.state_dict(), model_file)
+

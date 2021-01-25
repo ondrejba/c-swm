@@ -4,7 +4,7 @@ from envs.block_pushing_cursor import BlockPushingCursor
 import utils
 import matplotlib
 
-matplotlib.use("TkAgg")
+#matplotlib.use("TkAgg")
 
 
 def main():

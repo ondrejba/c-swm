@@ -24,6 +24,7 @@ parser.add_argument('--dataset', type=str,
                     help='Dataset string.')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
+parser.add_argument('--rot', action='store_true', default=False)
 
 args_eval = parser.parse_args()
 
@@ -69,7 +70,8 @@ model = modules.ContrastiveSWM(
     only_same_ep_neg=args.only_same_ep_neg,
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
-    encoder=args.encoder).to(device)
+    encoder=args.encoder,
+    rot=args.rot).to(device)
 
 model.load_state_dict(torch.load(model_file))
 model.eval()
@@ -83,80 +85,99 @@ rr_sum = 0
 pred_states = []
 next_states = []
 
+num_batches = len(eval_loader)
+
 with torch.no_grad():
 
-    for batch_idx, data_batch in enumerate(eval_loader):
-        data_batch = [[t.to(
-            device) for t in tensor] for tensor in data_batch]
-        observations, actions = data_batch
+    for i in range(0,num_batches,10):
+        #print("Chunk",i)
+        batches = 0 
+        for batch_idx, data_batch in enumerate(eval_loader):  #error, not resuming where left off...
+            
+            #print("batch_idx",batch_idx)
 
-        if observations[0].size(0) != args.batch_size:
-            continue
+            data_batch = [[t.to(
+                device) for t in tensor] for tensor in data_batch]
+            observations, actions = data_batch
 
-        obs = observations[0]
-        next_obs = observations[-1]
+            if observations[0].size(0) != args.batch_size:
+                continue
 
-        state = model.obj_encoder(model.obj_extractor(obs))
-        next_state = model.obj_encoder(model.obj_extractor(next_obs))
+            obs = observations[0]
+            next_obs = observations[-1]
 
-        pred_state = state
-        for i in range(args_eval.num_steps):
-            pred_trans = model.transition_model(pred_state, actions[i])
-            pred_state = pred_state + pred_trans
+            state = model.obj_encoder(model.obj_extractor(obs))
+            next_state = model.obj_encoder(model.obj_extractor(next_obs))
 
-        pred_states.append(pred_state.cpu())
-        next_states.append(next_state.cpu())
+            pred_state = state
+            for i in range(args_eval.num_steps):
+                pred_trans = model.transition_model(pred_state, actions[i])
+                pred_state = pred_state + pred_trans
 
-    pred_state_cat = torch.cat(pred_states, dim=0)
-    next_state_cat = torch.cat(next_states, dim=0)
+            pred_states.append(pred_state.cpu())
+            next_states.append(next_state.cpu())
 
-    full_size = pred_state_cat.size(0)
+            batches += 1
+            if batch_idx >= 9:
+                batches = 0
+                break
 
-    # Flatten object/feature dimensions
-    next_state_flat = next_state_cat.view(full_size, -1)
-    pred_state_flat = pred_state_cat.view(full_size, -1)
+        pred_state_cat = torch.cat(pred_states, dim=0)
+        next_state_cat = torch.cat(next_states, dim=0)
 
-    dist_matrix = utils.pairwise_distance_matrix(
-        next_state_flat, pred_state_flat)
-    dist_matrix_diag = torch.diag(dist_matrix).unsqueeze(-1)
-    dist_matrix_augmented = torch.cat(
-        [dist_matrix_diag, dist_matrix], dim=1)
+        full_size = pred_state_cat.size(0)
 
-    # Workaround to get a stable sort in numpy.
-    dist_np = dist_matrix_augmented.numpy()
-    indices = []
-    for row in dist_np:
-        keys = (np.arange(len(row)), row)
-        indices.append(np.lexsort(keys))
-    indices = np.stack(indices, axis=0)
-    indices = torch.from_numpy(indices).long()
 
-    print('Processed {} batches of size {}'.format(
-        batch_idx + 1, args.batch_size))
+        # Flatten object/feature dimensions
+        next_state_flat = next_state_cat.view(full_size, -1)
+        pred_state_flat = pred_state_cat.view(full_size, -1)
 
-    labels = torch.zeros(
-        indices.size(0), device=indices.device,
-        dtype=torch.int64).unsqueeze(-1)
+        dist_matrix = utils.pairwise_distance_matrix(
+            next_state_flat, pred_state_flat)
+        dist_matrix_diag = torch.diag(dist_matrix).unsqueeze(-1)
+        dist_matrix_augmented = torch.cat(
+            [dist_matrix_diag, dist_matrix], dim=1)
 
-    num_samples += full_size
-    print('Size of current topk evaluation batch: {}'.format(
-        full_size))
 
-    for k in topk:
-        match = indices[:, :k] == labels
-        num_matches = match.sum()
-        hits_at[k] += num_matches.item()
+        # Workaround to get a stable sort in numpy.
+        dist_np = dist_matrix_augmented.numpy()
+        indices = []
+        for row in dist_np:
+            keys = (np.arange(len(row)), row)
+            indices.append(np.lexsort(keys))
+        indices = np.stack(indices, axis=0)
+        indices = torch.from_numpy(indices).long()
 
-    match = indices == labels
-    _, ranks = match.max(1)
+        print('Processed {} batches of size {}'.format(
+            batch_idx + 1, args.batch_size))
 
-    reciprocal_ranks = torch.reciprocal(ranks.double() + 1)
-    rr_sum += reciprocal_ranks.sum()
+        labels = torch.zeros(
+            indices.size(0), device=indices.device,
+            dtype=torch.int64).unsqueeze(-1)
 
-    pred_states = []
-    next_states = []
+        num_samples += full_size
+        print('Size of current topk evaluation batch: {}'.format(
+            full_size))
 
-for k in topk:
-    print('Hits @ {}: {}'.format(k, hits_at[k] / float(num_samples)))
+        for k in topk:
+            match = indices[:, :k] == labels
+            num_matches = match.sum()
+            hits_at[k] += num_matches.item()
 
-print('MRR: {}'.format(rr_sum / float(num_samples)))
+        match = indices == labels
+        _, ranks = match.max(1)
+
+        reciprocal_ranks = torch.reciprocal(ranks.double() + 1)
+        rr_sum += reciprocal_ranks.sum()
+
+        pred_states = []
+        next_states = []
+
+
+
+        print("num_samples: {} ; Hits: {}; rr_sum: {}".format(num_samples,hits_at[topk[0]],rr_sum))
+
+        for k in topk:
+            print('Hits @ {}: {}'.format(k, hits_at[k] / float(num_samples)))
+
+        print('MRR: {}'.format(rr_sum / float(num_samples)))

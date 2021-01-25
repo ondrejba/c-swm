@@ -83,3 +83,17 @@ register(
     max_episode_steps=10,
     kwargs={'render_type': 'cubes'},
 )
+
+register(
+    'RushHourTrain-v0',
+    entry_point='envs.rush_hour:RushHour',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes'},
+)
+
+register(
+    'RushHourEval-v0',
+    entry_point='envs.rush_hour:RushHour',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes'},
+)
