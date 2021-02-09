@@ -101,7 +101,7 @@ print = logger.info
 pickle.dump({'args': args}, open(meta_file, "wb"))
 
 device = torch.device('cuda' if args.cuda else 'cpu')
-device = 'cpu'  #Debug
+#device = 'cpu'  #Debug
 
 dataset = utils.StateTransitionsDataset(
     hdf5_file=args.dataset)

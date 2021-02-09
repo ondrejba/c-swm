@@ -85,7 +85,14 @@ class ContrastiveSWM(nn.Module):
 
         encoder_input_dim = np.prod(width_height)
         if self.rot:
-            encoder_input_dim = 7 #Hard-coded for now
+            # we want a square input
+            assert len(width_height) == 2 and width_height[0] == width_height[1]
+            if width_height[0] % 2 == 0:
+                # even
+                encoder_input_dim = (width_height[0] // 2) * (width_height[1] // 2)
+            else:
+                # odd
+                encoder_input_dim = ((width_height[0] - 1) // 2) * ((width_height[1] - 1) // 2 + 1) + 1
 
         self.obj_encoder = mlp_class(input_dim=encoder_input_dim,
                                      hidden_dim=hidden_dim,
@@ -217,8 +224,9 @@ class C4Conv(nn.Module):
         #self.mat=torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0) \
         #    .permute(0,2,1,3).reshape(1,1,mat_shape[0],mat_shape[2],mat_shape[1]*mat_shape[3])
 
-    def rollAxes(self,T):
-        return T.permute(len(T.shape)-1,*list(range(0,len(T.shape)-1)))
+    # TODO: not used
+    #def rollAxes(self,T):
+    #    return T.permute(len(T.shape)-1,*list(range(0,len(T.shape)-1)))
 
 
     def forward(self, x):
@@ -263,23 +271,23 @@ class RotEncoderMLP(nn.Module):
         self.fc2 = C4Conv(hidden_dim, hidden_dim)
         self.fc3 = C4Conv(hidden_dim, output_dim)
 
-        self.ln = nn.LayerNorm(hidden_dim)
+        # input [batch, num_objects, 4, hidden_dim], normalize over last two dims
+        self.ln = nn.LayerNorm([4, hidden_dim])
 
         self.act1 = utils.get_act_fn(act_fn)
         self.act2 = utils.get_act_fn(act_fn)
 
-
-
     def forward(self, ins):
         """ 
         input: 2D Shapes (batch, num_objects, 5, 5)
-
         """
-        #[batch,num_objects,5,5]
+        # [batch, num_objects, height (e.g. 5), width (e.g. 5)]
         h_flat = self.orbit_stack(ins)
-        #[batch,num_objects,4,7]
+        # [batch, num_objects, 4, number of orbits / channel dimension (e.g. 7)]
         h = self.act1(self.fc1(h_flat))
+        # [batch, num_objects, 4, hidden_dim]
         h = self.act2(self.ln(self.fc2(h)))
+        # [batch, num_objects, 4, output_dim]
         return self.fc3(h)
 
     def rot90(self, x, exp = 1):
@@ -294,15 +302,27 @@ class RotEncoderMLP(nn.Module):
         H should be odd and input is square image
         """
         H = x.size(-1)
-        c = (H - 1) // 2
-        n_orbits = 1 + c + (c)**2
-        
-        out = torch.zeros((x.size(0),x.size(1),n_orbits,4),device=self.fc1.weights.device)
 
-        out[:,:,0,:] = ((x[:,:,c,c]).unsqueeze(2)).expand(-1,-1,4)
-        for i in range(4):
-            out[:,:,1:,i] = self.rot90(x,i)[:,:,:c,:c+1].reshape(x.size(0),x.size(1),-1)
-        
+        if H % 2 == 1:
+            # odd
+            c = (H - 1) // 2
+            n_orbits = 1 + c + (c)**2
+
+            out = torch.zeros((x.size(0),x.size(1),n_orbits,4),device=self.fc1.weights.device)
+
+            out[:,:,0,:] = ((x[:,:,c,c]).unsqueeze(2)).expand(-1,-1,4)
+            for i in range(4):
+                out[:,:,1:,i] = self.rot90(x,i)[:,:,:c,:c+1].reshape(x.size(0),x.size(1),-1)
+        else:
+            # even
+            n_orbits = (H // 2)**2
+            c = H // 2
+
+            out = torch.zeros((x.size(0), x.size(1), n_orbits, 4), device=self.fc1.weights.device)
+
+            for i in range(4):
+                out[:, :, :, i] = self.rot90(x, i)[:, :, :c, :c].reshape(x.size(0), x.size(1), -1)
+
         return out.permute(0,1,3,2)
 
 
