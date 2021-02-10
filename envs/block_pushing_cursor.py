@@ -24,10 +24,11 @@ class BlockPushingCursor(BlockPushing):
     }
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
-                 seed=None, immovable=False):
+                 seed=None, immovable=False, same_shape_and_color=False):
 
         super(BlockPushingCursor, self).__init__(width=width, height=height, render_type=render_type,
-                                                 num_objects=num_objects, seed=seed, immovable=immovable)
+                                                 num_objects=num_objects, seed=seed, immovable=immovable,
+                                                 same_shape_and_color=same_shape_and_color)
 
         # overwrite action space
         self.num_actions = 8
@@ -46,19 +47,30 @@ class BlockPushingCursor(BlockPushing):
         if self.render_type == "shapes":
             # draw shapes
             im = np.zeros((self.width * 10, self.height * 10, 3), dtype=np.float32)
-            for idx, pos in enumerate(self.objects):
-                if idx % 3 == 0:
+
+            if self.same_shape_and_color:
+
+                for pos in self.objects:
+
                     rr, cc = skimage.draw.circle(
                         pos[0] * 10 + 5, pos[1] * 10 + 5, 5, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
-                elif idx % 3 == 1:
-                    rr, cc = triangle(
-                        pos[0] * 10, pos[1] * 10, 10, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
-                else:
-                    rr, cc = square(
-                        pos[0] * 10, pos[1] * 10, 10, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
+                    im[rr, cc, :] = self.colors[0][:3]
+
+            else:
+
+                for idx, pos in enumerate(self.objects):
+                    if idx % 3 == 0:
+                        rr, cc = skimage.draw.circle(
+                            pos[0] * 10 + 5, pos[1] * 10 + 5, 5, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    elif idx % 3 == 1:
+                        rr, cc = triangle(
+                            pos[0] * 10, pos[1] * 10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    else:
+                        rr, cc = square(
+                            pos[0] * 10, pos[1] * 10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
 
             # draw cursor
             rr, cc = square(

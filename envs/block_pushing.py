@@ -77,13 +77,14 @@ class BlockPushing(gym.Env):
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
                  seed=None, immovable=False, immovable_fixed=False, opposite_direction=False,
-                 background=BACKGROUND_WHITE, num_colors=5):
+                 background=BACKGROUND_WHITE, num_colors=5, same_shape_and_color=False):
         self.width = width
         self.height = height
         self.render_type = render_type
         self.immovable = immovable
         self.immovable_fixed = immovable_fixed
         self.opposite_direction = opposite_direction
+        self.same_shape_and_color = same_shape_and_color
 
         self.num_objects = num_objects
         self.num_actions = 4 * self.num_objects  # Move NESW
@@ -124,6 +125,8 @@ class BlockPushing(gym.Env):
     def render(self):
         # background color is only implemented for some render types
         assert self.background == self.BACKGROUND_WHITE or self.render_type in ["shapes", "cubes"]
+        # same shapes only implemented for shapes
+        assert not self.same_shape_and_color or self.render_type == "shapes"
 
         if self.render_type == 'grid':
             im = np.zeros((3, self.width, self.height))
@@ -141,19 +144,30 @@ class BlockPushing(gym.Env):
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
             im = self.set_background_color_shapes_(im)
 
-            for idx, pos in enumerate(self.objects):
-                if idx % 3 == 0:
+            if self.same_shape_and_color:
+
+                for pos in self.objects:
+
                     rr, cc = skimage.draw.circle(
-                        pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
-                elif idx % 3 == 1:
-                    rr, cc = triangle(
-                        pos[0]*10, pos[1]*10, 10, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
-                else:
-                    rr, cc = square(
-                        pos[0]*10, pos[1]*10, 10, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
+                        pos[0] * 10 + 5, pos[1] * 10 + 5, 5, im.shape)
+                    im[rr, cc, :] = self.colors[0][:3]
+
+            else:
+
+                for idx, pos in enumerate(self.objects):
+                    if idx % 3 == 0:
+                        rr, cc = skimage.draw.circle(
+                            pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    elif idx % 3 == 1:
+                        rr, cc = triangle(
+                            pos[0]*10, pos[1]*10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    else:
+                        rr, cc = square(
+                            pos[0]*10, pos[1]*10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+
             return im.transpose([2, 0, 1])
         elif self.render_type == 'cubes':
             im = render_cubes(self.objects, self.width, background_color=self.get_background_color_())

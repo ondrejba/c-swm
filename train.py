@@ -58,6 +58,7 @@ parser.add_argument('--bisim-eps', type=float)
 parser.add_argument('--bisim-model-path')
 parser.add_argument('--next-state-neg', default=False, action="store_true")
 parser.add_argument('--nl-type', default=0, type=int)
+parser.add_argument('--coord-grid', default=False, action='store_true')
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -164,7 +165,8 @@ model = modules.ContrastiveSWM(
     bisim_eps=args.bisim_eps,
     next_state_neg=args.next_state_neg,
     nl_type=args.nl_type,
-    encoder=args.encoder).to(device)
+    encoder=args.encoder,
+    use_coord_grid=args.coord_grid).to(device)
 
 model.apply(utils.weights_init)
 

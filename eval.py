@@ -72,7 +72,8 @@ model = modules.ContrastiveSWM(
     split_gnn=args.split_gnn,
     no_loss_first_two=args.no_loss_first_two,
     bisim_model=make_pairwise_encoder() if args.bisim_model_path else None,
-    encoder=args.encoder).to(device)
+    encoder=args.encoder,
+    use_coord_grid=args.coord_grid).to(device)
 
 model.load_state_dict(torch.load(model_file))
 model.eval()
@@ -99,8 +100,8 @@ with torch.no_grad():
         obs = observations[0]
         next_obs = observations[-1]
 
-        state = model.obj_encoder(model.obj_extractor(obs))
-        next_state = model.obj_encoder(model.obj_extractor(next_obs))
+        state = model.forward(obs)
+        next_state = model.forward(next_obs)
 
         pred_state = state
         for i in range(args_eval.num_steps):

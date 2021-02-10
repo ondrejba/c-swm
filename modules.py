@@ -32,7 +32,8 @@ class ContrastiveSWM(nn.Module):
                  same_ep_neg=False, only_same_ep_neg=False, immovable_bit=False,
                  split_gnn=False, no_loss_first_two=False,
                  gamma=1.0, bisim_metric=None, bisim_eps=None,
-                 bisim_model=None, nl_type=NL_STANDARD, next_state_neg=False):
+                 bisim_model=None, nl_type=NL_STANDARD, next_state_neg=False,
+                 use_coord_grid=False):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -54,6 +55,7 @@ class ContrastiveSWM(nn.Module):
         self.bisim_model = bisim_model
         self.nl_type = nl_type
         self.next_state_neg = next_state_neg
+        self.use_coord_grid = use_coord_grid
 
         assert self.nl_type in [
             self.NL_STANDARD, self.NL_BISIM, self.NL_BISIM_METRIC, self.NL_BISIM_METRIC_EPS,
@@ -65,6 +67,10 @@ class ContrastiveSWM(nn.Module):
 
         num_channels = input_dims[0]
         width_height = input_dims[1:]
+
+        if self.use_coord_grid:
+            # grid of (x,y) coordinates
+            num_channels += 2
 
         if encoder == 'small':
             self.obj_extractor = EncoderCNNSmall(
@@ -111,6 +117,13 @@ class ContrastiveSWM(nn.Module):
         self.width = width_height[0]
         self.height = width_height[1]
 
+        if self.use_coord_grid:
+            WIDTH_HEIGHT = 50
+            x = np.tile(np.arange(WIDTH_HEIGHT).astype(np.float32)[:, None], [1, WIDTH_HEIGHT])
+            y = np.tile(np.arange(WIDTH_HEIGHT).astype(np.float32)[None, :], [WIDTH_HEIGHT, 1])
+            self.coord_grid = np.stack([x, y], 0)[None, :, :, :]
+            self.coord_grid = torch.tensor(self.coord_grid, dtype=torch.float32)
+
     def energy(self, state, action, next_state, no_trans=False):
         """Energy function based on normalized squared L2 norm."""
 
@@ -150,6 +163,8 @@ class ContrastiveSWM(nn.Module):
         self.pos_loss = self.pos_loss.mean()
 
         if custom_negs is not None:
+            # I should add a coordinate grid here as well, but I'm too lazy to implement it rn
+            assert not self.use_coord_grid
 
             custom_neg_objs = self.obj_extractor(custom_negs)
             custom_neg_state = self.obj_encoder(custom_neg_objs)
@@ -178,11 +193,8 @@ class ContrastiveSWM(nn.Module):
 
     def extract_objects_(self, obs, next_obs):
 
-        objs = self.obj_extractor(obs)
-        next_objs = self.obj_extractor(next_obs)
-
-        state = self.obj_encoder(objs)
-        next_state = self.obj_encoder(next_objs)
+        state = self.forward(obs)
+        next_state = self.forward(next_obs)
 
         return state, next_state
 
@@ -262,6 +274,15 @@ class ContrastiveSWM(nn.Module):
         self.neg_loss = self.neg_loss.sum() / dists.sum()
 
     def forward(self, obs):
+
+        if self.use_coord_grid:
+
+            if obs.device != self.coord_grid.device:
+                self.coord_grid = self.coord_grid.to(obs.device)
+
+            x = self.coord_grid.expand(obs.size(0), -1, -1, -1)
+            obs = torch.cat([obs, x], dim=1)
+
         return self.obj_encoder(self.obj_extractor(obs))
 
 

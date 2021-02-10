@@ -188,6 +188,20 @@ register(
 )
 
 register(
+    'ShapesSameCursorTrain-v0',
+    entry_point='envs.block_pushing_cursor:BlockPushingCursor',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'same_shape_and_color': True},
+)
+
+register(
+    'ShapesSameCursorEval-v0',
+    entry_point='envs.block_pushing_cursor:BlockPushingCursor',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'same_shape_and_color': True},
+)
+
+register(
     'CubesTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
