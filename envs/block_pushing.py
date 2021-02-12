@@ -27,6 +27,11 @@ def triangle(r0, c0, width, im_size):
     return skimage.draw.polygon(rr, cc, im_size)
 
 
+def diamond(r0, c0, width, im_size):
+    rr, cc = [r0, r0 + width//2, r0 + width, r0 + width//2], [c0 + width//2, c0, c0 + width//2, c0 + width]
+    return skimage.draw.polygon(rr, cc, im_size)
+
+
 def fig2rgb_array(fig):
     fig.canvas.draw()
     buffer = fig.canvas.tostring_rgb()
@@ -68,12 +73,18 @@ class BlockPushing(gym.Env):
     DIRECTIONS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
 
     def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
-                 seed=None, immovable=False, immovable_fixed=False):
+                 seed=None, immovable=False, immovable_fixed=False,
+                 no_triangles=False, diamonds=False):
+
+        assert not (no_triangles and diamonds)
+
         self.width = width
         self.height = height
         self.render_type = render_type
         self.immovable = immovable
         self.immovable_fixed = immovable_fixed
+        self.no_triangles = no_triangles
+        self.diamonds = diamonds
 
         self.num_objects = num_objects
         self.num_actions = 4 * self.num_objects  # Move NESW
@@ -126,9 +137,18 @@ class BlockPushing(gym.Env):
                         pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
                     im[rr, cc, :] = self.colors[idx][:3]
                 elif idx % 3 == 1:
-                    rr, cc = triangle(
-                        pos[0]*10, pos[1]*10, 10, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
+                    if self.no_triangles:
+                        rr, cc = square(
+                            pos[0] * 10, pos[1] * 10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    elif self.diamonds:
+                        rr, cc = diamond(
+                            pos[0] * 10, pos[1] * 10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    else:
+                        rr, cc = triangle(
+                            pos[0] * 10, pos[1] * 10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
                 else:
                     rr, cc = square(
                         pos[0]*10, pos[1]*10, 10, im.shape)
