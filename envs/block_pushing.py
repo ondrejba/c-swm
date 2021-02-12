@@ -228,8 +228,9 @@ class BlockPushing(gym.Env):
         """
 
         # the first two objects are immovable
-        if obj_id in [0, 1]:
-            return False
+        if self.immovable:
+            if obj_id in [0, 1]:
+                return False
 
         if not self.valid_move(obj_id, offset):
             return False
