@@ -15,6 +15,34 @@ register(
 )
 
 register(
+    'ShapesNoTrianglesTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'no_triangles': True},
+)
+
+register(
+    'ShapesNoTrianglesEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'no_triangles': True},
+)
+
+register(
+    'ShapesDiamondsTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'diamonds': True},
+)
+
+register(
+    'ShapesDiamondsEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'diamonds': True},
+)
+
+register(
     'ShapesCursorTrain-v0',
     entry_point='envs.block_pushing_cursor:BlockPushingCursor',
     max_episode_steps=100,
