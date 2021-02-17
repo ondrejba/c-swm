@@ -6,7 +6,8 @@ import numpy as np
 import torch
 from torch import nn
 
-
+from e2cnn import gspaces                                          #  1
+from e2cnn import nn as e2nn  
 
 class ContrastiveSWM(nn.Module):
     """Main module for a Contrastively-trained Structured World Model (C-SWM).
@@ -60,6 +61,13 @@ class ContrastiveSWM(nn.Module):
 
         if encoder == 'small':
             self.obj_extractor = EncoderCNNSmall(input_dim=num_channels,
+                                                 hidden_dim=hidden_dim // 16,
+                                                 num_objects=num_objects)
+            # CNN image size changes
+            width_height = np.array(width_height)
+            width_height = width_height // 10
+        elif encoder == 'small_rot':
+            self.obj_extractor = EncoderE2CNNSmall(input_dim=num_channels,
                                                  hidden_dim=hidden_dim // 16,
                                                  num_objects=num_objects)
             # CNN image size changes
@@ -125,11 +133,13 @@ class ContrastiveSWM(nn.Module):
             pred_trans = self.transition_model(state, action)
             diff = state + pred_trans - next_state
 
+        #not sure if correct
         return norm * diff.pow(2).sum(2).mean(1)
 
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
 
+    #Is this correct for rot? 
     def contrastive_loss(self, obs, action, next_obs):
 
         objs = self.obj_extractor(obs)
@@ -697,6 +707,29 @@ class EncoderCNNSmall(nn.Module):
         h = self.act1(self.ln1(self.cnn1(obs)))
         return self.act2(self.cnn2(h))
     
+class EncoderE2CNNSmall(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_objects):
+        
+        super(EncoderE2CNNSmall, self).__init__()
+        
+        r2_act = gspaces.Rot2dOnR2(N=4) 
+ 
+        self.feat_type_in = e2nn.FieldType(r2_act, input_dim*[r2_act.trivial_repr])
+        self.feat_type_hid = e2nn.FieldType(r2_act, (hidden_dim)//4*[r2_act.regular_repr])
+        self.feat_type_out = e2nn.FieldType(r2_act, num_objects*[r2_act.trivial_repr])
+        
+        self.model = e2nn.SequentialModule(
+            e2nn.R2Conv(self.feat_type_in, self.feat_type_hid, kernel_size=10,stride=10),
+            e2nn.InnerBatchNorm(self.feat_type_hid),
+            e2nn.ReLU(self.feat_type_hid),
+            e2nn.R2Conv(self.feat_type_hid, self.feat_type_out, kernel_size=1),
+            e2nn.PointwiseNonLinearity(self.feat_type_out, function='p_sigmoid')
+        )
+        
+    def forward(self, x):
+        x = e2nn.GeometricTensor(x, self.feat_type_in)
+        y = self.model(x)
+        return y.tensor
     
 class EncoderCNNMedium(nn.Module):
     """CNN encoder, maps observation to obj-specific feature maps."""
