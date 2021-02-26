@@ -43,6 +43,13 @@ register(
 )
 
 register(
+    'ShapesDiamondsTrain1S-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=1,
+    kwargs={'render_type': 'shapes', 'diamonds': True},
+)
+
+register(
     'ShapesCursorTrain-v0',
     entry_point='envs.block_pushing_cursor:BlockPushingCursor',
     max_episode_steps=100,

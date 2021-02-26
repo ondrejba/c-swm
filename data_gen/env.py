@@ -35,12 +35,36 @@ class RandomAgent(object):
         del observation, reward, done
 
         if self.no_immovable_actions:
-            tmp_action = self.action_space.sample()
+            tmp_action = self.sample()
             while tmp_action < 8:
-                tmp_action = self.action_space.sample()
+                tmp_action = self.sample()
             return tmp_action
         else:
-            return self.action_space.sample()
+            return self.sample()
+
+    def sample(self):
+
+        return self.action_space.sample()
+
+
+class SkewedRandomAgent(RandomAgent):
+
+    def __init__(self, action_space, up_prob, no_immovable_actions=False):
+        super(SkewedRandomAgent, self).__init__(action_space, no_immovable_actions=no_immovable_actions)
+        self.up_prob = up_prob
+        assert 0 <= up_prob <= 1
+
+    def sample(self):
+
+        num_actions = self.action_space.n
+        num_objects = num_actions // 4
+
+        obj = np.random.randint(num_objects)
+        other_prob = (1 - self.up_prob) / 3
+        probs = [self.up_prob, other_prob, other_prob, other_prob]
+        direction = np.random.choice(list(range(4)), p=probs)
+
+        return obj * 4 + direction
 
 
 def crop_normalize(img, crop_ratio):
@@ -60,6 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--atari', action='store_true', default=False,
                         help='Run atari mode (stack multiple frames).')
     parser.add_argument('--no-immovable-actions', action='store_true', default=False)
+    parser.add_argument('--skewed-up-prob', default=None, type=float)
     parser.add_argument('--seed', type=int, default=1,
                         help='Random seed.')
     args = parser.parse_args()
@@ -72,7 +97,10 @@ if __name__ == '__main__':
     env.action_space.seed(args.seed)
     env.seed(args.seed)
 
-    agent = RandomAgent(env.action_space, no_immovable_actions=args.no_immovable_actions)
+    if args.skewed_up_prob is not None:
+        agent = SkewedRandomAgent(env.action_space, args.skewed_up_prob, no_immovable_actions=args.no_immovable_actions)
+    else:
+        agent = RandomAgent(env.action_space, no_immovable_actions=args.no_immovable_actions)
 
     episode_count = args.num_episodes
     reward = 0
