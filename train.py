@@ -216,5 +216,8 @@ for epoch in range(1, args.epochs + 1):
 
     if avg_loss < best_loss:
         best_loss = avg_loss
+        model.eval()   
         torch.save(model.state_dict(), model_file)
+        #torch.save(model, model_file)
+
 

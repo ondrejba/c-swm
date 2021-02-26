@@ -55,6 +55,8 @@ eval_loader = data.DataLoader(
 obs = eval_loader.__iter__().next()[0]
 input_shape = obs[0][0].size()
 
+print(args)
+
 model = modules.ContrastiveSWM(
     embedding_dim=args.embedding_dim,
     hidden_dim=args.hidden_dim,
@@ -73,7 +75,9 @@ model = modules.ContrastiveSWM(
     encoder=args.encoder,
     rot=args.rot).to(device)
 
-model.load_state_dict(torch.load(model_file))
+model.eval()
+model_state_dict = torch.load(model_file)
+model.load_state_dict(model_state_dict)
 model.eval()
 
 # topk = [1, 5, 10]
