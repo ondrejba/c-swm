@@ -83,6 +83,12 @@ python data_gen/physics.py --num-episodes 1000 --fname data/balls_eval.h5 --eval
 
 ## Run model training and evaluation
 
+**2D Shapes + Rot + Rot Obj Ext**:
+```bash
+python train.py --dataset data/shapes_train.h5 --encoder small_rot --rot --name shapes_rot_ext --hidden-dim 256
+python eval.py --dataset data/shapes_eval.h5 --save-folder checkpoints/shapes_rot_ext --num-steps 10
+```
+
 **2D Shapes**:
 ```bash
 python train.py --dataset data/shapes_train.h5 --encoder small --name shapes

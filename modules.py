@@ -6,8 +6,9 @@ import numpy as np
 import torch
 from torch import nn
 
-from e2cnn import gspaces                                          #  1
-from e2cnn import nn as e2nn  
+from e2cnn import gspaces  #  1
+from e2cnn import nn as e2nn
+
 
 class ContrastiveSWM(nn.Module):
     """Main module for a Contrastively-trained Structured World Model (C-SWM).
@@ -68,8 +69,8 @@ class ContrastiveSWM(nn.Module):
             width_height = width_height // 10
         elif encoder == 'small_rot':
             self.obj_extractor = EncoderE2CNNSmall(input_dim=num_channels,
-                                                 hidden_dim=hidden_dim // 16,
-                                                 num_objects=num_objects)
+                                                   hidden_dim=hidden_dim // 16,
+                                                   num_objects=num_objects)
             # CNN image size changes
             width_height = np.array(width_height)
             width_height = width_height // 10
@@ -87,20 +88,23 @@ class ContrastiveSWM(nn.Module):
 
         mlp_class = EncoderMLP
         if self.split_mlp:
-            mlp_class = SplitEncoderMLP    #To do, make switch  
+            mlp_class = SplitEncoderMLP  #To do, make switch
         if self.rot:
             mlp_class = RotEncoderMLP
 
         encoder_input_dim = np.prod(width_height)
         if self.rot:
             # we want a square input
-            assert len(width_height) == 2 and width_height[0] == width_height[1]
+            assert len(
+                width_height) == 2 and width_height[0] == width_height[1]
             if width_height[0] % 2 == 0:
                 # even
-                encoder_input_dim = (width_height[0] // 2) * (width_height[1] // 2)
+                encoder_input_dim = (width_height[0] //
+                                     2) * (width_height[1] // 2)
             else:
                 # odd
-                encoder_input_dim = ((width_height[0] - 1) // 2) * ((width_height[1] - 1) // 2 + 1) + 1
+                encoder_input_dim = ((width_height[0] - 1) // 2) * (
+                    (width_height[1] - 1) // 2 + 1) + 1
 
         self.obj_encoder = mlp_class(input_dim=encoder_input_dim,
                                      hidden_dim=hidden_dim,
@@ -108,23 +112,24 @@ class ContrastiveSWM(nn.Module):
                                      num_objects=num_objects)
 
         if self.rot:
-            self.transition_model = RotTransitionGNN(input_dim=embedding_dim,
-                                              hidden_dim=hidden_dim,
-                                              action_dim=action_dim,
-                                              num_objects=num_objects,
-                                              ignore_action=ignore_action,
-                                              copy_action=copy_action,
-                                              immovable_bit=immovable_bit,
-                                              split_gnn=split_gnn)
+            self.transition_model = RotTransitionGNN(
+                input_dim=embedding_dim,
+                hidden_dim=hidden_dim,
+                action_dim=action_dim,
+                num_objects=num_objects,
+                ignore_action=ignore_action,
+                copy_action=copy_action,
+                immovable_bit=immovable_bit,
+                split_gnn=split_gnn)
         else:
             self.transition_model = TransitionGNN(input_dim=embedding_dim,
-                                              hidden_dim=hidden_dim,
-                                              action_dim=action_dim,
-                                              num_objects=num_objects,
-                                              ignore_action=ignore_action,
-                                              copy_action=copy_action,
-                                              immovable_bit=immovable_bit,
-                                              split_gnn=split_gnn)
+                                                  hidden_dim=hidden_dim,
+                                                  action_dim=action_dim,
+                                                  num_objects=num_objects,
+                                                  ignore_action=ignore_action,
+                                                  copy_action=copy_action,
+                                                  immovable_bit=immovable_bit,
+                                                  split_gnn=split_gnn)
 
         self.width = width_height[0]
         self.height = width_height[1]
@@ -161,7 +166,7 @@ class ContrastiveSWM(nn.Module):
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
 
-    #Is this correct for rot? 
+    #Is this correct for rot?
     def contrastive_loss(self, obs, action, next_obs):
 
         objs = self.obj_extractor(obs)
@@ -238,13 +243,15 @@ class C4Conv(nn.Module):
         #bias *= k
         bias = torch.zeros(size_out)
         self.bias = torch.nn.parameter.Parameter(bias)
-        mat = torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0)
+        mat = torch.stack(
+            [torch.roll(self.weights, i, dims=0) for i in range(4)], dim=0)
         self.register_buffer('mat', mat)
-    
+
     def updateKernel(self):
         #V1,V2
-        self.mat=torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0)
-        
+        self.mat = torch.stack(
+            [torch.roll(self.weights, i, dims=0) for i in range(4)], dim=0)
+
         #V3
         #mat_shape = self.mat.shape
         #self.mat=torch.stack([torch.roll(self.weights,i,dims=0) for i in range(4)],dim=0) \
@@ -254,13 +261,12 @@ class C4Conv(nn.Module):
     #def rollAxes(self,T):
     #    return T.permute(len(T.shape)-1,*list(range(0,len(T.shape)-1)))
 
-
     def forward(self, x):
         #TODO: really should only call after update
         self.updateKernel()
-    
+
         #V1
-        w_times_x= torch.einsum('ghij,...hj->...gi',self.mat, x)
+        w_times_x = torch.einsum('ghij,...hj->...gi', self.mat, x)
 
         #V2
         # mat_shape = self.mat.shape
@@ -316,11 +322,11 @@ class RotEncoderMLP(nn.Module):
         # [batch, num_objects, 4, output_dim]
         return self.fc3(h)
 
-    def rot90(self, x, exp = 1):
+    def rot90(self, x, exp=1):
         if (exp == 0):
             return x
         else:
-            return self.rot90(x.flip(3).permute(0,1,3,2), exp - 1)
+            return self.rot90(x.flip(3).permute(0, 1, 3, 2), exp - 1)
 
     def orbit_stack(self, x):
         """
@@ -334,30 +340,40 @@ class RotEncoderMLP(nn.Module):
             c = (H - 1) // 2
             n_orbits = 1 + c + (c)**2
 
-            out = torch.zeros((x.size(0),x.size(1),n_orbits,4),device=self.fc1.weights.device)
+            out = torch.zeros((x.size(0), x.size(1), n_orbits, 4),
+                              device=self.fc1.weights.device)
 
-            out[:,:,0,:] = ((x[:,:,c,c]).unsqueeze(2)).expand(-1,-1,4)
+            out[:, :, 0, :] = ((x[:, :, c, c]).unsqueeze(2)).expand(-1, -1, 4)
             for i in range(4):
-                out[:,:,1:,i] = self.rot90(x,i)[:,:,:c,:c+1].reshape(x.size(0),x.size(1),-1)
+                out[:, :, 1:, i] = self.rot90(x, i)[:, :, :c, :c + 1].reshape(
+                    x.size(0), x.size(1), -1)
         else:
             # even
             n_orbits = (H // 2)**2
             c = H // 2
 
-            out = torch.zeros((x.size(0), x.size(1), n_orbits, 4), device=self.fc1.weights.device)
+            out = torch.zeros((x.size(0), x.size(1), n_orbits, 4),
+                              device=self.fc1.weights.device)
 
             for i in range(4):
-                out[:, :, :, i] = self.rot90(x, i)[:, :, :c, :c].reshape(x.size(0), x.size(1), -1)
+                out[:, :, :, i] = self.rot90(x, i)[:, :, :c, :c].reshape(
+                    x.size(0), x.size(1), -1)
 
-        return out.permute(0,1,3,2)
-
+        return out.permute(0, 1, 3, 2)
 
 
 class RotTransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
-    def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
-                 ignore_action=False, copy_action=False, act_fn='relu',
-                 immovable_bit=False, split_gnn=False):
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 action_dim,
+                 num_objects,
+                 ignore_action=False,
+                 copy_action=False,
+                 act_fn='relu',
+                 immovable_bit=False,
+                 split_gnn=False):
         super(RotTransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -376,27 +392,25 @@ class RotTransitionGNN(torch.nn.Module):
         else:
             self.action_dim = action_dim
 
-        self.edge_mlp = nn.Sequential(
-            C4Conv(self.input_dim*2, hidden_dim),
-            utils.get_act_fn(act_fn),
-            C4Conv(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            utils.get_act_fn(act_fn),
-            C4Conv(hidden_dim, hidden_dim))
-        
+        self.edge_mlp = nn.Sequential(C4Conv(self.input_dim * 2, hidden_dim),
+                                      utils.get_act_fn(act_fn),
+                                      C4Conv(hidden_dim, hidden_dim),
+                                      nn.LayerNorm(hidden_dim),
+                                      utils.get_act_fn(act_fn),
+                                      C4Conv(hidden_dim, hidden_dim))
+
         # [B X O x (H + 4) ]
         # [B x O x 4 x (H + 1)] (b,o,,i)  (1,0,0,0)  -->   (0,1,0,0)
         # [B x O x 4 x (H + 4)]
 
-        node_input_dim = hidden_dim + self.input_dim + 1 #action_dim = 1 vs. 4
+        node_input_dim = hidden_dim + self.input_dim + 1  #action_dim = 1 vs. 4
 
-        self.node_mlp = nn.Sequential(
-            C4Conv(node_input_dim, hidden_dim),
-            utils.get_act_fn(act_fn),
-            C4Conv(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            utils.get_act_fn(act_fn),
-            C4Conv(hidden_dim, self.input_dim))
+        self.node_mlp = nn.Sequential(C4Conv(node_input_dim, hidden_dim),
+                                      utils.get_act_fn(act_fn),
+                                      C4Conv(hidden_dim, hidden_dim),
+                                      nn.LayerNorm(hidden_dim),
+                                      utils.get_act_fn(act_fn),
+                                      C4Conv(hidden_dim, self.input_dim))
 
         if self.split_gnn:
             self.edge_mlp1 = self.edge_mlp
@@ -412,17 +426,31 @@ class RotTransitionGNN(torch.nn.Module):
         self.edge_list = None
         self.batch_size = 0
 
-    def _edge_model(self, source, target, edge_attr, source_indices=None, target_indices=None):
+    def _edge_model(self,
+                    source,
+                    target,
+                    edge_attr,
+                    source_indices=None,
+                    target_indices=None):
         del edge_attr  # Unused.
         out = torch.cat([source, target], dim=2)
 
         if self.split_gnn:
-            ret = torch.zeros((out.size(0), self.hidden_dim), dtype=out.dtype, device=out.device)
-            mask1 = np.logical_and(np.logical_or(source_indices == 0, source_indices == 1),
-                                   np.logical_or(target_indices == 0, target_indices == 1))
-            mask2 = np.logical_and(np.logical_or(np.logical_or(source_indices == 2, source_indices == 3), source_indices == 4),
-                                   np.logical_or(np.logical_or(target_indices == 2, target_indices == 3), target_indices == 4))
-            mask3 = np.logical_and(np.logical_not(mask1), np.logical_not(mask2))
+            ret = torch.zeros((out.size(0), self.hidden_dim),
+                              dtype=out.dtype,
+                              device=out.device)
+            mask1 = np.logical_and(
+                np.logical_or(source_indices == 0, source_indices == 1),
+                np.logical_or(target_indices == 0, target_indices == 1))
+            mask2 = np.logical_and(
+                np.logical_or(
+                    np.logical_or(source_indices == 2, source_indices == 3),
+                    source_indices == 4),
+                np.logical_or(
+                    np.logical_or(target_indices == 2, target_indices == 3),
+                    target_indices == 4))
+            mask3 = np.logical_and(np.logical_not(mask1),
+                                   np.logical_not(mask2))
 
             ret[mask1] = self.edge_mlp1(out[mask1])
             ret[mask2] = self.edge_mlp2(out[mask2])
@@ -434,21 +462,26 @@ class RotTransitionGNN(torch.nn.Module):
     def _node_model(self, node_attr, edge_index, edge_attr):
         if edge_attr is not None:
             row, col = edge_index
-            agg = utils.unsorted_segment_sum(
-                edge_attr, row, num_segments=node_attr.size(0))
+            agg = utils.unsorted_segment_sum(edge_attr,
+                                             row,
+                                             num_segments=node_attr.size(0))
             out = torch.cat([node_attr, agg], dim=2)
         else:
             out = node_attr
 
         if self.split_gnn:
-            ret = torch.zeros((out.size(0), self.input_dim), dtype=out.dtype, device=out.device)
-            obj12_indices = np.concatenate(
-                [np.arange(0, out.size(0), self.num_objects),
-                 np.arange(1, out.size(0), self.num_objects)])
-            obj345_indices = np.concatenate(
-                [np.arange(2, out.size(0), self.num_objects),
-                 np.arange(3, out.size(0), self.num_objects),
-                 np.arange(4, out.size(0), self.num_objects)])
+            ret = torch.zeros((out.size(0), self.input_dim),
+                              dtype=out.dtype,
+                              device=out.device)
+            obj12_indices = np.concatenate([
+                np.arange(0, out.size(0), self.num_objects),
+                np.arange(1, out.size(0), self.num_objects)
+            ])
+            obj345_indices = np.concatenate([
+                np.arange(2, out.size(0), self.num_objects),
+                np.arange(3, out.size(0), self.num_objects),
+                np.arange(4, out.size(0), self.num_objects)
+            ])
             ret[obj12_indices] = self.node_mlp1(out[obj12_indices])
             ret[obj345_indices] = self.node_mlp2(out[obj345_indices])
             return ret
@@ -469,8 +502,8 @@ class RotTransitionGNN(torch.nn.Module):
 
             # Copy `batch_size` times and add offset.
             self.edge_list = self.edge_list.repeat(batch_size, 1)
-            offset = torch.arange(
-                0, batch_size * num_objects, num_objects).unsqueeze(-1)
+            offset = torch.arange(0, batch_size * num_objects,
+                                  num_objects).unsqueeze(-1)
             offset = offset.expand(batch_size, num_objects * (num_objects - 1))
             offset = offset.contiguous().view(-1)
             self.edge_list += offset.unsqueeze(-1)
@@ -510,27 +543,28 @@ class RotTransitionGNN(torch.nn.Module):
                 batch_size, num_nodes, cuda)
 
             row, col = edge_index
-            edge_attr = self._edge_model(
-                node_attr[row], node_attr[col], edge_attr, source_indices=row % self.num_objects,
-                target_indices=col % self.num_objects)
+            edge_attr = self._edge_model(node_attr[row],
+                                         node_attr[col],
+                                         edge_attr,
+                                         source_indices=row % self.num_objects,
+                                         target_indices=col % self.num_objects)
 
         if not self.ignore_action:
 
             if self.copy_action:
-                action_vec = utils.to_one_hot(
-                    action, self.action_dim).repeat(1, self.num_objects)
+                action_vec = utils.to_one_hot(action, self.action_dim).repeat(
+                    1, self.num_objects)
                 action_vec = action_vec.view(-1, self.action_dim)
             else:
-                action_vec = utils.to_one_hot(
-                    action, self.action_dim * num_nodes)
+                action_vec = utils.to_one_hot(action,
+                                              self.action_dim * num_nodes)
                 action_vec = action_vec.view(-1, self.action_dim)
 
             # Attach action to each state
             #node_attr = torch.cat([node_attr, torch.flip(action_vec.unsqueeze(2),dims=[1])], dim=-1)
             node_attr = torch.cat([node_attr, action_vec.unsqueeze(2)], dim=-1)
 
-        node_attr = self._node_model(
-            node_attr, edge_index, edge_attr)
+        node_attr = self._node_model(node_attr, edge_index, edge_attr)
 
         # [batch_size, num_nodes, hidden_dim]
         node_attr = node_attr.view(batch_size, num_nodes, 4, -1)
@@ -543,12 +577,18 @@ class RotTransitionGNN(torch.nn.Module):
         return node_attr
 
 
-
 class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
-    def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
-                 ignore_action=False, copy_action=False, act_fn='relu',
-                 immovable_bit=False, split_gnn=False):
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 action_dim,
+                 num_objects,
+                 ignore_action=False,
+                 copy_action=False,
+                 act_fn='relu',
+                 immovable_bit=False,
+                 split_gnn=False):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -568,22 +608,19 @@ class TransitionGNN(torch.nn.Module):
             self.action_dim = action_dim
 
         self.edge_mlp = nn.Sequential(
-            nn.Linear(self.input_dim*2, hidden_dim),
-            utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            utils.get_act_fn(act_fn),
+            nn.Linear(self.input_dim * 2, hidden_dim),
+            utils.get_act_fn(act_fn), nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim), utils.get_act_fn(act_fn),
             nn.Linear(hidden_dim, hidden_dim))
 
         node_input_dim = hidden_dim + self.input_dim + self.action_dim
 
-        self.node_mlp = nn.Sequential(
-            nn.Linear(node_input_dim, hidden_dim),
-            utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, self.input_dim))
+        self.node_mlp = nn.Sequential(nn.Linear(node_input_dim, hidden_dim),
+                                      utils.get_act_fn(act_fn),
+                                      nn.Linear(hidden_dim, hidden_dim),
+                                      nn.LayerNorm(hidden_dim),
+                                      utils.get_act_fn(act_fn),
+                                      nn.Linear(hidden_dim, self.input_dim))
 
         if self.split_gnn:
             self.edge_mlp1 = self.edge_mlp
@@ -599,17 +636,31 @@ class TransitionGNN(torch.nn.Module):
         self.edge_list = None
         self.batch_size = 0
 
-    def _edge_model(self, source, target, edge_attr, source_indices=None, target_indices=None):
+    def _edge_model(self,
+                    source,
+                    target,
+                    edge_attr,
+                    source_indices=None,
+                    target_indices=None):
         del edge_attr  # Unused.
         out = torch.cat([source, target], dim=1)
 
         if self.split_gnn:
-            ret = torch.zeros((out.size(0), self.hidden_dim), dtype=out.dtype, device=out.device)
-            mask1 = np.logical_and(np.logical_or(source_indices == 0, source_indices == 1),
-                                   np.logical_or(target_indices == 0, target_indices == 1))
-            mask2 = np.logical_and(np.logical_or(np.logical_or(source_indices == 2, source_indices == 3), source_indices == 4),
-                                   np.logical_or(np.logical_or(target_indices == 2, target_indices == 3), target_indices == 4))
-            mask3 = np.logical_and(np.logical_not(mask1), np.logical_not(mask2))
+            ret = torch.zeros((out.size(0), self.hidden_dim),
+                              dtype=out.dtype,
+                              device=out.device)
+            mask1 = np.logical_and(
+                np.logical_or(source_indices == 0, source_indices == 1),
+                np.logical_or(target_indices == 0, target_indices == 1))
+            mask2 = np.logical_and(
+                np.logical_or(
+                    np.logical_or(source_indices == 2, source_indices == 3),
+                    source_indices == 4),
+                np.logical_or(
+                    np.logical_or(target_indices == 2, target_indices == 3),
+                    target_indices == 4))
+            mask3 = np.logical_and(np.logical_not(mask1),
+                                   np.logical_not(mask2))
 
             ret[mask1] = self.edge_mlp1(out[mask1])
             ret[mask2] = self.edge_mlp2(out[mask2])
@@ -620,21 +671,26 @@ class TransitionGNN(torch.nn.Module):
     def _node_model(self, node_attr, edge_index, edge_attr):
         if edge_attr is not None:
             row, col = edge_index
-            agg = utils.unsorted_segment_sum(
-                edge_attr, row, num_segments=node_attr.size(0))
+            agg = utils.unsorted_segment_sum(edge_attr,
+                                             row,
+                                             num_segments=node_attr.size(0))
             out = torch.cat([node_attr, agg], dim=1)
         else:
             out = node_attr
 
         if self.split_gnn:
-            ret = torch.zeros((out.size(0), self.input_dim), dtype=out.dtype, device=out.device)
-            obj12_indices = np.concatenate(
-                [np.arange(0, out.size(0), self.num_objects),
-                 np.arange(1, out.size(0), self.num_objects)])
-            obj345_indices = np.concatenate(
-                [np.arange(2, out.size(0), self.num_objects),
-                 np.arange(3, out.size(0), self.num_objects),
-                 np.arange(4, out.size(0), self.num_objects)])
+            ret = torch.zeros((out.size(0), self.input_dim),
+                              dtype=out.dtype,
+                              device=out.device)
+            obj12_indices = np.concatenate([
+                np.arange(0, out.size(0), self.num_objects),
+                np.arange(1, out.size(0), self.num_objects)
+            ])
+            obj345_indices = np.concatenate([
+                np.arange(2, out.size(0), self.num_objects),
+                np.arange(3, out.size(0), self.num_objects),
+                np.arange(4, out.size(0), self.num_objects)
+            ])
             ret[obj12_indices] = self.node_mlp1(out[obj12_indices])
             ret[obj345_indices] = self.node_mlp2(out[obj345_indices])
             return ret
@@ -655,8 +711,8 @@ class TransitionGNN(torch.nn.Module):
 
             # Copy `batch_size` times and add offset.
             self.edge_list = self.edge_list.repeat(batch_size, 1)
-            offset = torch.arange(
-                0, batch_size * num_objects, num_objects).unsqueeze(-1)
+            offset = torch.arange(0, batch_size * num_objects,
+                                  num_objects).unsqueeze(-1)
             offset = offset.expand(batch_size, num_objects * (num_objects - 1))
             offset = offset.contiguous().view(-1)
             self.edge_list += offset.unsqueeze(-1)
@@ -694,26 +750,27 @@ class TransitionGNN(torch.nn.Module):
                 batch_size, num_nodes, cuda)
 
             row, col = edge_index
-            edge_attr = self._edge_model(
-                node_attr[row], node_attr[col], edge_attr, source_indices=row % self.num_objects,
-                target_indices=col % self.num_objects)
+            edge_attr = self._edge_model(node_attr[row],
+                                         node_attr[col],
+                                         edge_attr,
+                                         source_indices=row % self.num_objects,
+                                         target_indices=col % self.num_objects)
 
         if not self.ignore_action:
 
             if self.copy_action:
-                action_vec = utils.to_one_hot(
-                    action, self.action_dim).repeat(1, self.num_objects)
+                action_vec = utils.to_one_hot(action, self.action_dim).repeat(
+                    1, self.num_objects)
                 action_vec = action_vec.view(-1, self.action_dim)
             else:
-                action_vec = utils.to_one_hot(
-                    action, self.action_dim * num_nodes)
+                action_vec = utils.to_one_hot(action,
+                                              self.action_dim * num_nodes)
                 action_vec = action_vec.view(-1, self.action_dim)
 
             # Attach action to each state
             node_attr = torch.cat([node_attr, action_vec], dim=-1)
 
-        node_attr = self._node_model(
-            node_attr, edge_index, edge_attr)
+        node_attr = self._node_model(node_attr, edge_index, edge_attr)
 
         # [batch_size, num_nodes, hidden_dim]
         node_attr = node_attr.view(batch_size, num_nodes, -1)
@@ -726,15 +783,16 @@ class TransitionGNN(torch.nn.Module):
         return node_attr
 
 
-
 class EncoderCNNSmall(nn.Module):
     """CNN encoder, maps observation to obj-specific feature maps."""
-    
-    def __init__(self, input_dim, hidden_dim, num_objects, act_fn='sigmoid',
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 num_objects,
+                 act_fn='sigmoid',
                  act_fn_hid='relu'):
         super(EncoderCNNSmall, self).__init__()
-        self.cnn1 = nn.Conv2d(
-            input_dim, hidden_dim, (10, 10), stride=10)
+        self.cnn1 = nn.Conv2d(input_dim, hidden_dim, (10, 10), stride=10)
         self.cnn2 = nn.Conv2d(hidden_dim, num_objects, (1, 1), stride=1)
         self.ln1 = nn.BatchNorm2d(hidden_dim)
         self.act1 = utils.get_act_fn(act_fn_hid)
@@ -743,45 +801,53 @@ class EncoderCNNSmall(nn.Module):
     def forward(self, obs):
         h = self.act1(self.ln1(self.cnn1(obs)))
         return self.act2(self.cnn2(h))
-    
+
+
 class EncoderE2CNNSmall(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, num_objects):
-        
+
         super(EncoderE2CNNSmall, self).__init__()
-        
-        r2_act = gspaces.Rot2dOnR2(N=4) 
- 
-        self.feat_type_in = e2nn.FieldType(r2_act, input_dim*[r2_act.trivial_repr])
-        self.feat_type_hid = e2nn.FieldType(r2_act, (hidden_dim)//4*[r2_act.regular_repr])
-        self.feat_type_out = e2nn.FieldType(r2_act, num_objects*[r2_act.trivial_repr])
-        
+
+        r2_act = gspaces.Rot2dOnR2(N=4)
+
+        self.feat_type_in = e2nn.FieldType(r2_act,
+                                           input_dim * [r2_act.trivial_repr])
+        self.feat_type_hid = e2nn.FieldType(r2_act, (hidden_dim) // 4 *
+                                            [r2_act.regular_repr])
+        self.feat_type_out = e2nn.FieldType(
+            r2_act, num_objects * [r2_act.trivial_repr])
+
         self.model = e2nn.SequentialModule(
-            e2nn.R2Conv(self.feat_type_in, self.feat_type_hid, kernel_size=10,stride=10),
-            e2nn.InnerBatchNorm(self.feat_type_hid),
+            e2nn.R2Conv(self.feat_type_in,
+                        self.feat_type_hid,
+                        kernel_size=10,
+                        stride=10), e2nn.InnerBatchNorm(self.feat_type_hid),
             e2nn.ReLU(self.feat_type_hid),
             e2nn.R2Conv(self.feat_type_hid, self.feat_type_out, kernel_size=1),
-            e2nn.PointwiseNonLinearity(self.feat_type_out, function='p_sigmoid')
-        )
-        
+            e2nn.PointwiseNonLinearity(self.feat_type_out,
+                                       function='p_sigmoid'))
+
     def forward(self, x):
         x = e2nn.GeometricTensor(x, self.feat_type_in)
         y = self.model(x)
         return y.tensor
-    
+
+
 class EncoderCNNMedium(nn.Module):
     """CNN encoder, maps observation to obj-specific feature maps."""
-    
-    def __init__(self, input_dim, hidden_dim, num_objects, act_fn='sigmoid',
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 num_objects,
+                 act_fn='sigmoid',
                  act_fn_hid='leaky_relu'):
         super(EncoderCNNMedium, self).__init__()
 
-        self.cnn1 = nn.Conv2d(
-            input_dim, hidden_dim, (9, 9), padding=4)
+        self.cnn1 = nn.Conv2d(input_dim, hidden_dim, (9, 9), padding=4)
         self.act1 = utils.get_act_fn(act_fn_hid)
         self.ln1 = nn.BatchNorm2d(hidden_dim)
 
-        self.cnn2 = nn.Conv2d(
-            hidden_dim, num_objects, (5, 5), stride=5)
+        self.cnn2 = nn.Conv2d(hidden_dim, num_objects, (5, 5), stride=5)
         self.act2 = utils.get_act_fn(act_fn)
 
     def forward(self, obs):
@@ -792,8 +858,11 @@ class EncoderCNNMedium(nn.Module):
 
 class EncoderCNNLarge(nn.Module):
     """CNN encoder, maps observation to obj-specific feature maps."""
-    
-    def __init__(self, input_dim, hidden_dim, num_objects, act_fn='sigmoid',
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 num_objects,
+                 act_fn='sigmoid',
                  act_fn_hid='relu'):
         super(EncoderCNNLarge, self).__init__()
 
@@ -821,8 +890,11 @@ class EncoderCNNLarge(nn.Module):
 
 class EncoderMLP(nn.Module):
     """MLP encoder, maps observation to latent state."""
-    
-    def __init__(self, input_dim, output_dim, hidden_dim, num_objects,
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 hidden_dim,
+                 num_objects,
                  act_fn='relu'):
         super(EncoderMLP, self).__init__()
 
@@ -846,8 +918,11 @@ class EncoderMLP(nn.Module):
 
 
 class SplitEncoderMLP(nn.Module):
-
-    def __init__(self, input_dim, output_dim, hidden_dim, num_objects,
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 hidden_dim,
+                 num_objects,
                  act_fn='relu'):
         super(SplitEncoderMLP, self).__init__()
 
@@ -859,8 +934,16 @@ class SplitEncoderMLP(nn.Module):
         # for now, I hard-coded the immovable objects setup
         assert num_objects == 5
 
-        self.e_immovable = EncoderMLP(input_dim, output_dim, hidden_dim, 2, act_fn=act_fn)
-        self.e_movable = EncoderMLP(input_dim, output_dim, hidden_dim, 3, act_fn=act_fn)
+        self.e_immovable = EncoderMLP(input_dim,
+                                      output_dim,
+                                      hidden_dim,
+                                      2,
+                                      act_fn=act_fn)
+        self.e_movable = EncoderMLP(input_dim,
+                                    output_dim,
+                                    hidden_dim,
+                                    3,
+                                    act_fn=act_fn)
 
     def forward(self, ins):
         h_flat = ins.view(-1, self.num_objects, self.input_dim)
@@ -871,8 +954,11 @@ class SplitEncoderMLP(nn.Module):
 
 class DecoderMLP(nn.Module):
     """MLP decoder, maps latent state to image."""
-    
-    def __init__(self, input_dim, hidden_dim, num_objects, output_size,
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 num_objects,
+                 output_size,
                  act_fn='relu'):
         super(DecoderMLP, self).__init__()
 
@@ -902,8 +988,11 @@ class DecoderMLP(nn.Module):
 
 class DecoderCNNSmall(nn.Module):
     """CNN decoder, maps latent state to image."""
-    
-    def __init__(self, input_dim, hidden_dim, num_objects, output_size,
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 num_objects,
+                 output_size,
                  act_fn='relu'):
         super(DecoderCNNSmall, self).__init__()
 
@@ -916,10 +1005,14 @@ class DecoderCNNSmall(nn.Module):
         self.fc3 = nn.Linear(hidden_dim, output_dim)
         self.ln = nn.LayerNorm(hidden_dim)
 
-        self.deconv1 = nn.ConvTranspose2d(num_objects, hidden_dim,
-                                          kernel_size=1, stride=1)
-        self.deconv2 = nn.ConvTranspose2d(hidden_dim, output_size[0],
-                                          kernel_size=10, stride=10)
+        self.deconv1 = nn.ConvTranspose2d(num_objects,
+                                          hidden_dim,
+                                          kernel_size=1,
+                                          stride=1)
+        self.deconv2 = nn.ConvTranspose2d(hidden_dim,
+                                          output_size[0],
+                                          kernel_size=10,
+                                          stride=10)
 
         self.input_dim = input_dim
         self.num_objects = num_objects
@@ -942,8 +1035,11 @@ class DecoderCNNSmall(nn.Module):
 
 class DecoderCNNMedium(nn.Module):
     """CNN decoder, maps latent state to image."""
-    
-    def __init__(self, input_dim, hidden_dim, num_objects, output_size,
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 num_objects,
+                 output_size,
                  act_fn='relu'):
         super(DecoderCNNMedium, self).__init__()
 
@@ -956,10 +1052,14 @@ class DecoderCNNMedium(nn.Module):
         self.fc3 = nn.Linear(hidden_dim, output_dim)
         self.ln = nn.LayerNorm(hidden_dim)
 
-        self.deconv1 = nn.ConvTranspose2d(num_objects, hidden_dim,
-                                          kernel_size=5, stride=5)
-        self.deconv2 = nn.ConvTranspose2d(hidden_dim, output_size[0],
-                                          kernel_size=9, padding=4)
+        self.deconv1 = nn.ConvTranspose2d(num_objects,
+                                          hidden_dim,
+                                          kernel_size=5,
+                                          stride=5)
+        self.deconv2 = nn.ConvTranspose2d(hidden_dim,
+                                          output_size[0],
+                                          kernel_size=9,
+                                          padding=4)
 
         self.ln1 = nn.BatchNorm2d(hidden_dim)
 
@@ -984,8 +1084,11 @@ class DecoderCNNMedium(nn.Module):
 
 class DecoderCNNLarge(nn.Module):
     """CNN decoder, maps latent state to image."""
-
-    def __init__(self, input_dim, hidden_dim, num_objects, output_size,
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 num_objects,
+                 output_size,
                  act_fn='relu'):
         super(DecoderCNNLarge, self).__init__()
 
@@ -998,14 +1101,22 @@ class DecoderCNNLarge(nn.Module):
         self.fc3 = nn.Linear(hidden_dim, output_dim)
         self.ln = nn.LayerNorm(hidden_dim)
 
-        self.deconv1 = nn.ConvTranspose2d(num_objects, hidden_dim,
-                                          kernel_size=3, padding=1)
-        self.deconv2 = nn.ConvTranspose2d(hidden_dim, hidden_dim,
-                                          kernel_size=3, padding=1)
-        self.deconv3 = nn.ConvTranspose2d(hidden_dim, hidden_dim,
-                                          kernel_size=3, padding=1)
-        self.deconv4 = nn.ConvTranspose2d(hidden_dim, output_size[0],
-                                          kernel_size=3, padding=1)
+        self.deconv1 = nn.ConvTranspose2d(num_objects,
+                                          hidden_dim,
+                                          kernel_size=3,
+                                          padding=1)
+        self.deconv2 = nn.ConvTranspose2d(hidden_dim,
+                                          hidden_dim,
+                                          kernel_size=3,
+                                          padding=1)
+        self.deconv3 = nn.ConvTranspose2d(hidden_dim,
+                                          hidden_dim,
+                                          kernel_size=3,
+                                          padding=1)
+        self.deconv4 = nn.ConvTranspose2d(hidden_dim,
+                                          output_size[0],
+                                          kernel_size=3,
+                                          padding=1)
 
         self.ln1 = nn.BatchNorm2d(hidden_dim)
         self.ln2 = nn.BatchNorm2d(hidden_dim)
