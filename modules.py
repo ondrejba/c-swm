@@ -132,16 +132,31 @@ class ContrastiveSWM(nn.Module):
     def energy(self, state, action, next_state, no_trans=False):
         """Energy function based on normalized squared L2 norm."""
 
+        state_flat = state
+        next_state_flat = next_state
+        if len(state.shape) == 4:
+            # rot90
+            state_flat = self.rot90_to_normal(state)
+            next_state_flat = self.rot90_to_normal(next_state)
+
         norm = 0.5 / (self.sigma**2)
 
         if no_trans:
-            diff = state - next_state
+            diff = state_flat - next_state_flat
         else:
-            pred_trans = self.transition_model(state, action)
-            diff = state + pred_trans - next_state
+            pred_trans_flat = self.transition_model(state, action)
 
-        #not sure if correct
+            if len(pred_trans_flat.shape) == 4:
+                # rot90
+                pred_trans_flat = self.rot90_to_normal(pred_trans_flat)
+
+            diff = state_flat + pred_trans_flat - next_state_flat
+
         return norm * diff.pow(2).sum(2).mean(1)
+
+    def rot90_to_normal(self, x):
+        # going from something like [|B|, |O|, 4, 2] to [|B|, |O|, 8]
+        return x.reshape(x.size(0), x.size(1), x.size(2) * x.size(3))
 
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
@@ -164,9 +179,10 @@ class ContrastiveSWM(nn.Module):
         zeros = torch.zeros_like(self.pos_loss)
 
         self.pos_loss = self.pos_loss.mean()
+
         self.neg_loss = torch.max(
             zeros, self.hinge -
-            self.energy(state, action, neg_state, no_trans=True)).mean()
+            self.energy(state, None, neg_state, no_trans=True)).mean()
 
         if self.same_ep_neg:
             ep_size = state.size(1)
@@ -468,7 +484,8 @@ class RotTransitionGNN(torch.nn.Module):
         return self.edge_list
 
     def forward(self, states, action):
-
+        # expect [|B|, |O|, 4, 2] or similar
+        assert len(states.shape) == 4
         cuda = states.is_cuda
         batch_size = states.size(0)
         num_nodes = states.size(1)
