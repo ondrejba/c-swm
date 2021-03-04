@@ -89,6 +89,12 @@ python train.py --dataset data/shapes_train.h5 --encoder small_rot --rot --name 
 python eval.py --dataset data/shapes_eval.h5 --save-folder checkpoints/shapes_rot_ext --num-steps 10
 ```
 
+**2D Shapes + Rot + Proj **:
+```bash
+python train.py --dataset data/shapes_train.h5 --encoder small --embedding-rep std --rot --name shapes_rot_proj --hidden-dim 256
+python eval.py --dataset data/shapes_eval.h5 --save-folder checkpoints/shapes_rot_proj --num-steps 10
+```
+
 **2D Shapes**:
 ```bash
 python train.py --dataset data/shapes_train.h5 --encoder small --name shapes

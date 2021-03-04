@@ -37,7 +37,8 @@ class ContrastiveSWM(nn.Module):
                  only_same_ep_neg=False,
                  immovable_bit=False,
                  split_gnn=False,
-                 rot=False):
+                 rot=False,
+                 embedding_rep='rhoreg'):
         super(ContrastiveSWM, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -53,6 +54,7 @@ class ContrastiveSWM(nn.Module):
         self.only_same_ep_neg = only_same_ep_neg
         self.split_gnn = split_gnn
         self.rot = rot
+        self.embedding_rep = embedding_rep
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -91,6 +93,8 @@ class ContrastiveSWM(nn.Module):
             mlp_class = SplitEncoderMLP  #To do, make switch
         if self.rot:
             mlp_class = RotEncoderMLP
+            if(self.embedding_rep == 'std'):
+                self.state_projector = C4_rhoreg_to_std_Conv(self.embedding_dim,self.embedding_dim)
 
         encoder_input_dim = np.prod(width_height)
         if self.rot:
@@ -110,6 +114,8 @@ class ContrastiveSWM(nn.Module):
                                      hidden_dim=hidden_dim,
                                      output_dim=embedding_dim,
                                      num_objects=num_objects)
+
+
 
         if self.rot:
             self.transition_model = RotTransitionGNN(
@@ -161,6 +167,8 @@ class ContrastiveSWM(nn.Module):
 
     def rot90_to_normal(self, x):
         # going from something like [|B|, |O|, 4, 2] to [|B|, |O|, 8]
+        if self.embedding_rep == 'std':
+            return self.state_projector(x)
         return x.reshape(x.size(0), x.size(1), x.size(2) * x.size(3))
 
     def transition_loss(self, state, action, next_state):
@@ -227,6 +235,45 @@ class ContrastiveSWM(nn.Module):
         obj = self.obj_extractor(obs)
         return self.obj_encoder(obj)
 
+## We denote the representations of the group C_4 = {1,g,g^2,g^3} as follows:
+# rhoreg - R^4 with permutation action  g e_i = e_{i+1 mod 4}
+# triv - R with g e_1 = e_1
+# sign - R with g e_1 = -e_1
+# std - R^2 with g = {{0,-1}
+#                     {1, 0}}
+
+# {{x,-y,-x, y}
+#   y, x,-y,-x}}
+class C4_rhoreg_to_std_Conv(nn.Module):
+    """C_4 Convolution"""
+    def __init__(self, size_in, size_out):
+        super().__init__()
+        self.size_in, self.size_out = size_in, size_out
+        weights = torch.rand(2, size_out, size_in)
+        weights -= 0.5
+        k = 1 / torch.sqrt(torch.tensor(size_in, dtype=torch.float))
+        weights *= k
+        self.weights = torch.nn.parameter.Parameter(weights)
+        bias = torch.zeros(size_out)
+        self.bias = torch.nn.parameter.Parameter(bias)
+        mat = torch.stack(
+            [torch.stack([self.weights[0], -self.weights[1], -self.weights[0],  self.weights[1]]),
+            torch.stack([self.weights[1],  self.weights[0], -self.weights[1], -self.weights[0]])])
+        self.register_buffer('mat', mat)
+
+    def updateKernel(self):
+        self.mat = torch.stack(
+            [torch.stack([self.weights[0], -self.weights[1], -self.weights[0],  self.weights[1]]),
+            torch.stack([self.weights[1],  self.weights[0], -self.weights[1], -self.weights[0]])])
+
+    def forward(self, x):
+        self.updateKernel()
+        # x:  [B,O,4,size_in]
+        # mat:[2,4,size_out,size_in]   
+        # y:  [B,O,2,size_out]
+        w_times_x = torch.einsum('ghij,...hj->...gi', self.mat, x)
+
+        return torch.add(w_times_x, self.bias)  
 
 class C4Conv(nn.Module):
     """C_4 Convolution"""
@@ -265,6 +312,9 @@ class C4Conv(nn.Module):
         #TODO: really should only call after update
         self.updateKernel()
 
+        # x:  [B,O,4,size_in]
+        # mat:[4,4,size_out,size_in]
+        # y:  [B,O,4,size_out]
         #V1
         w_times_x = torch.einsum('ghij,...hj->...gi', self.mat, x)
 

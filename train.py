@@ -48,6 +48,7 @@ parser.add_argument('--immovable-bit', action='store_true', default=False)
 parser.add_argument('--same-ep-neg', action='store_true', default=False)
 parser.add_argument('--only-same-ep-neg', action='store_true', default=False)
 parser.add_argument('--rot', action='store_true', default=False)
+parser.add_argument('--embedding-rep', type=str, default='rhoreg')
 
 parser.add_argument('--decoder', action='store_true', default=False,
                     help='Train model using decoder and pixel-based loss.')
@@ -128,7 +129,8 @@ model = modules.ContrastiveSWM(
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
     encoder=args.encoder,
-    rot=args.rot).to(device)
+    rot=args.rot,
+    embedding_rep=args.embedding_rep).to(device)
 
 model.apply(utils.weights_init)
 
