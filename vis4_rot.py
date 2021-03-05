@@ -152,7 +152,7 @@ with torch.no_grad():
             #     plt.subplot(5, num_objects + 1, num_objects + 3 + i, projection='3d')
             #     plt.scatter(all_states[:, 0, dims[0], 0], all_states[:, 0, dims[1], 0], all_states[:, 0, dims[2], 0], c="red")
             #     plt.scatter(all_states[:, 0, dims[0], 1], all_states[:, 0, dims[1], 1], all_states[:, 0, dims[2], 1], c="blue")
-
+            #
             for j in range(state_np.shape[2]):
 
                 for i in range(num_objects):

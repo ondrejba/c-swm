@@ -254,11 +254,9 @@ class C4_rhoreg_to_std_Conv(nn.Module):
         k = 1 / torch.sqrt(torch.tensor(size_in, dtype=torch.float))
         weights *= k
         self.weights = torch.nn.parameter.Parameter(weights)
-        bias = torch.zeros(size_out)
-        self.bias = torch.nn.parameter.Parameter(bias)
         mat = torch.stack(
             [torch.stack([self.weights[0], -self.weights[1], -self.weights[0],  self.weights[1]]),
-            torch.stack([self.weights[1],  self.weights[0], -self.weights[1], -self.weights[0]])])
+             torch.stack([self.weights[1],  self.weights[0], -self.weights[1], -self.weights[0]])])
         self.register_buffer('mat', mat)
 
     def updateKernel(self):
@@ -273,7 +271,7 @@ class C4_rhoreg_to_std_Conv(nn.Module):
         # y:  [B,O,2,size_out]
         w_times_x = torch.einsum('ghij,...hj->...gi', self.mat, x)
 
-        return torch.add(w_times_x, self.bias)  
+        return w_times_x
 
 class C4Conv(nn.Module):
     """C_4 Convolution"""

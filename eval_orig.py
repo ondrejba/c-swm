@@ -70,7 +70,8 @@ model = modules.ContrastiveSWM(
     immovable_bit=args.immovable_bit,
     split_gnn=args.split_gnn,
     encoder=args.encoder,
-    rot=args.rot).to(device)
+    rot=args.rot,
+    embedding_rep=args.embedding_rep).to(device)
 
 model.load_state_dict(torch.load(model_file))
 model.eval()
