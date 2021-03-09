@@ -57,6 +57,9 @@ input_shape = obs[0][0].size()
 
 print(args)
 
+if not hasattr(args, "embedding_rep"):
+    args.embedding_rep = "rhoreg"
+
 model = modules.ContrastiveSWM(
     embedding_dim=args.embedding_dim,
     hidden_dim=args.hidden_dim,
