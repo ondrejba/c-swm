@@ -66,6 +66,16 @@ class SkewedRandomAgent(RandomAgent):
 
         return obj * 4 + direction
 
+class LimitActionsRandomAgent(RandomAgent):
+
+    def __init__(self, action_space, actions, no_immovable_actions=False):
+        super(LimitActionsRandomAgent, self).__init__(action_space, no_immovable_actions=no_immovable_actions)
+        self.actions = actions
+        self.num_actions = self.action_space.n
+        assert set(actions).issubset(set(range(self.num_actions)))
+
+    def sample(self):        
+        return np.random.choice(self.actions)
 
 def crop_normalize(img, crop_ratio):
     img = img[crop_ratio[0]:crop_ratio[1]]
@@ -87,6 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('--skewed-up-prob', default=None, type=float)
     parser.add_argument('--seed', type=int, default=1,
                         help='Random seed.')
+    parser.add_argument('--actions',nargs='+', type=int, default=[])
     args = parser.parse_args()
 
     logger.set_level(logger.INFO)
@@ -99,6 +110,8 @@ if __name__ == '__main__':
 
     if args.skewed_up_prob is not None:
         agent = SkewedRandomAgent(env.action_space, args.skewed_up_prob, no_immovable_actions=args.no_immovable_actions)
+    elif len(args.actions) > 0:
+        agent = LimitActionsRandomAgent(env.action_space, args.actions, no_immovable_actions=args.no_immovable_actions)
     else:
         agent = RandomAgent(env.action_space, no_immovable_actions=args.no_immovable_actions)
 
